@@ -1,12 +1,12 @@
 import { Suspense } from "react";
-import Home from "./dashboard";
+import ProfilePage from "./profile-client";
 
 export const dynamic = "force-dynamic";
 
 export default function ChatPage() {
   return (
     <Suspense fallback={null}>
-      <Home />
+      <ProfilePage />
     </Suspense>
   );
 }

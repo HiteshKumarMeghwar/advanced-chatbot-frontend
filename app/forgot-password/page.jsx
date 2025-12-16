@@ -1,12 +1,12 @@
 import { Suspense } from "react";
-import Home from "./dashboard";
+import ClientForgotPassword from './client-forgot-password'
 
 export const dynamic = "force-dynamic";
 
-export default function ChatPage() {
+export default function ForgotPasswordPage() {
   return (
     <Suspense fallback={null}>
-      <Home />
+      <ClientForgotPassword />
     </Suspense>
   );
 }
