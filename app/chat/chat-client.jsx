@@ -175,8 +175,8 @@ export default function ChatPage() {
                     key={m.id} 
                     role={m.role} 
                     text={m.text} 
+                    raw={m.raw ?? m.text}
                     isStreaming={m.id === streamingMessageId} 
-                    waitingForBackend={waitingForBackend} 
                   />
                 ))}
               </div>
@@ -196,7 +196,7 @@ export default function ChatPage() {
             waitingForBackend={waitingForBackend}
           />
         </div>
-        <Footer />
+        {/* <Footer /> */}
       </div>
     </div>
   );

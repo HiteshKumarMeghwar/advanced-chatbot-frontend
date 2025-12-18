@@ -1,9 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { User, Bot, ThumbsUp, ThumbsDown, Copy, Check } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+import {
+  User, Bot, ThumbsUp, ThumbsDown, Copy, Check,
+  Zap, Info, AlertTriangle, Lightbulb, Star, Heart,
+  Calendar, Clock, MapPin, Link, FileText, Image,
+  Video, Music, Mic, DollarSign, TrendingUp, TrendingDown,
+  BarChart, PieChart, Activity, Users, Mail, Phone,
+  Smartphone, Wifi, WifiOff, RefreshCw, Download, Upload,
+  ExternalLink, BookOpen, GraduationCap, Award, Target,
+  Rocket, Settings, Sliders, Filter, Search, ZoomIn, ZoomOut,
+  Play, Pause, Stop, SkipForward, SkipBack, Volume2, VolumeX,
+  RadioReceiver, SatelliteDish, Telescope, Microscope, Beaker,
+  TestTube, Pill, HeartPulse, Stethoscope, Bandage, Medicine,
+  Hospital, Ambulance, UserPlus, UserMinus, UserX, Group,
+  Contacts, AddressBook, Bookmark, BookmarkPlus, StarOff,
+  Flag, MapPinned, Navigation, Compass, Crosshair, Route,
+  GitBranch, GitCommit, GitPullRequest, Bitbucket, Docker,
+  Kubernetes, Terminal, Command, Code, Code2, FileCode, Bug,
+  CpuChip, Radio, Broadcast, Podcast, Airplay, Cast, Chromecast,
+  AppleTv, Television, Monitor, SmartphoneCharging, Battery,
+  BatteryCharging, BatteryLow, BatteryFull, Power, PowerOff,
+  Sleep, Wake, BellRing, BellDot, Volume1, Headphones, Headset
+} from "lucide-react";
+
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -11,46 +34,26 @@ import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
 import rehypeKatex from "rehype-katex";
 
-import "highlight.js/styles/github-dark.css";
+import "highlight.js/styles/github-dark.css"; // dark
 import "katex/dist/katex.min.css";
 
-export default function ChatMessage({ role, text, isStreaming, waitingForBackend  }) {
+export default function ChatMessage({ role, text, raw, isStreaming  }) {
   const isUser = role === "user";
   const [feedback, setFeedback] = useState(null);
   const [copied, setCopied] = useState(false);
 
-  /** Streaming effect */
-  const [visibleText, setVisibleText] = useState(isUser ? text : "");
-
-  const showLoader = role === 'assistant' && waitingForBackend;
-
-  useEffect(() => {
-    if (!isStreaming || isUser) {
-      setVisibleText(text);
-      return;
-    }
-
-    let i = 0;
-    const interval = setInterval(() => {
-      setVisibleText(text.slice(0, i));
-      i++;
-      if (i > text.length) clearInterval(interval);
-    }, 12); // smooth typing
-
-    return () => clearInterval(interval);
-  }, [text, isStreaming, isUser]);
+  const showLoader = role === 'assistant' && isStreaming;
 
 
   const copyText = async () => {
     try {
-      await navigator.clipboard.writeText(String(text));
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch (err) {
       console.error("Copy failed", err);
     }
   };
-
 
   return (
     <div className={cn("flex gap-4 mb-4", isUser && "flex-row-reverse")}>
@@ -92,43 +95,162 @@ export default function ChatMessage({ role, text, isStreaming, waitingForBackend
               components={{
                 /* Code blocks with copy */
                 pre: ({ children }) => {
-                  const code = children?.props?.children || "";
+                  const [copied, setCopied] = useState(false);
+
+                  const code =
+                    typeof raw === "string"
+                      ? raw.match(/```[\s\S]*?```/)?.[0]
+                          ?.replace(/```[a-zA-Z]*\n?/, "")
+                          ?.replace(/```$/, "")
+                      : "";
+
+                  const handleCopy = async () => {
+                    try {
+                      await navigator.clipboard.writeText(code);
+                      setCopied(true);
+
+                      setTimeout(() => {
+                        setCopied(false);
+                      }, 1800);
+                    } catch (err) {
+                      console.error("Copy failed", err);
+                    }
+                  };
 
                   return (
                     <div className="relative my-4">
                       <button
-                        onClick={() => navigator.clipboard.writeText(code)}
-                        className="absolute right-2 top-2 rounded bg-black/70 px-2 py-1 text-xs text-white hover:bg-black"
+                        onClick={handleCopy}
+                        className="
+                          absolute right-2 top-2 rounded px-2 py-1 text-xs
+                          flex items-center gap-1
+                          bg-muted text-foreground
+                          dark:bg-black/70 dark:text-white
+                          hover:opacity-80 transition
+                          m-2
+                        "
                       >
-                        Copy
+                        {copied ? (
+                          <>
+                            <Check className="h-3.5 w-3.5 text-green-500 text-white" />
+                            <p className="text-white">Copied</p>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5 text-white" />
+                            <p className="text-white">Copy</p>
+                          </>
+                        )}
                       </button>
-                      <pre className="bg-black/90 rounded-lg p-4 overflow-x-auto text-sm">
+
+                      <pre
+                        className="
+                          rounded-lg p-4 overflow-x-auto text-sm
+                          bg-muted text-foreground
+                          dark:bg-black/90 dark:text-gray-100
+                        "
+                      >
                         {children}
                       </pre>
                     </div>
                   );
                 },
 
+                hr: ({ children }) => (
+                  <div className="flex items-center gap-4 my-6">
+                    <div className="h-px bg-slate-300 dark:bg-slate-700 flex-1" />
+                    <Star className="w-5 h-5 text-yellow-500" />
+                    <div className="h-px bg-slate-300 dark:bg-slate-700 flex-1" />
+                  </div>
+                ),
+                h1: ({ children }) => (
+                  <div className="flex items-center gap-3 mb-4">
+                    <Rocket className="w-7 h-7 text-indigo-500" />
+                    <h1 className="text-3xl font-extrabold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                      {children}
+                    </h1>
+                  </div>
+                ),
+                h2: ({ children }) => (
+                  <div className="flex items-center gap-2 mt-4 mb-2">
+                    <Zap className="text-yellow-500 w-5 h-5" />
+                    <h2 className="text-lg font-semibold">{children}</h2>
+                  </div>
+                ),
+                h3: ({ children }) => (
+                  <div className="flex items-center gap-2 mt-5 mb-2">
+                    <Lightbulb className="w-5 h-5 text-amber-500" />
+                    <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-200">{children}</h3>
+                  </div>
+                ),
+                ul: ({ children }) => <ul className="list-none space-y-2 ml-4">{children}</ul>,
+                li: ({ children }) => (
+                  <li className="flex items-start gap-2">
+                    <span className="mt-1 text-indigo-500">
+                      <Check className="w-4 h-4" />
+                    </span>
+                    <span className="flex-1">{children}</span>
+                  </li>
+                ),
+                blockquote: ({ children }) => (
+                  <div className="border-l-4 border-purple-500 bg-purple-50 dark:bg-purple-900/20 p-4 my-4 rounded-r-lg shadow-sm">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Info className="w-5 h-5 text-purple-600" />
+                      <span className="text-sm font-semibold text-purple-700 dark:text-purple-300">Note</span>
+                    </div>
+                    <div className="text-slate-700 dark:text-slate-300">{children}</div>
+                  </div>
+                ),
+
+                strong: ({ children }) => (
+                  <span className="font-bold text-indigo-600 dark:text-indigo-400">{children}</span>
+                ),
+
+                em: ({ children }) => (
+                  <span className="italic text-pink-600 dark:text-pink-400">{children}</span>
+                ),
+
+                a: ({ children, href }) => (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    {children}
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                ),
+                // Paragraphs
+                p: ({ children }) => <p className="text-sm md:text-base leading-relaxed my-2">{children}</p>,
+                // Lists
+                ul: ({ children }) => <ul className="list-disc pl-6 space-y-1">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal pl-6 space-y-1">{children}</ol>,
+                li: ({ children }) => <li className="my-1">{children}</li>,
+                // Tables
                 table: ({ children }) => (
-                  <div className="overflow-x-auto my-4 rounded-lg border">
-                    <table className="w-full border-collapse">
+                  <div className="overflow-x-auto my-2">
+                    <table className="table-auto border-collapse border border-gray-300 dark:border-gray-600 w-full text-sm">
                       {children}
                     </table>
                   </div>
                 ),
                 th: ({ children }) => (
-                  <th className="bg-muted px-3 py-2 border text-xs uppercase">
+                  <th className="border border-gray-300 dark:border-gray-600 px-2 py-1 bg-gray-200 dark:bg-gray-700 font-semibold text-left">
                     {children}
                   </th>
                 ),
                 td: ({ children }) => (
-                  <td className="px-3 py-2 border text-sm">
-                    {children}
-                  </td>
+                  <td className="border border-gray-300 dark:border-gray-600 px-2 py-1">{children}</td>
                 ),
+                // Task lists
+                input: ({ type, checked }) =>
+                  type === "checkbox" ? (
+                    <input type="checkbox" checked={checked} readOnly className="mr-2" />
+                  ) : null,
               }}
             >
-              {isUser ? text : visibleText}
+              {text}
             </ReactMarkdown>
           </div>
         </div>

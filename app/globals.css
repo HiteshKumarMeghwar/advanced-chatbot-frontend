@@ -1,6 +1,34 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@layer components {
+  /* ======  Markdown tables  ====== */
+  .prose table {
+    @apply w-full border-collapse rounded-lg overflow-hidden border border-slate-700 dark:border-slate-300;
+  }
+  .prose thead {
+    @apply bg-gradient-to-r from-indigo-600 to-purple-600 text-white dark:from-indigo-500 dark:to-purple-500;
+  }
+  .prose th {
+    @apply px-4 py-3 text-left text-sm font-semibold tracking-wide;
+  }
+  .prose tbody tr {
+    @apply border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors;
+  }
+  .prose td {
+    @apply px-4 py-3 text-sm text-slate-800 dark:text-slate-200;
+  }
+  .prose tbody tr:nth-child(odd) {
+    @apply bg-slate-100/50 dark:bg-slate-900/50;
+  }
+  .prose .overflow-x-auto::-webkit-scrollbar {
+    height: 6px;
+  }
+  .prose .overflow-x-auto::-webkit-scrollbar-thumb {
+    @apply bg-purple-500/80 rounded-full;
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

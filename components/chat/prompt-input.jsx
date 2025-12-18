@@ -19,15 +19,16 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { sendChat } from "@/api/send_chat";
+import { sendChatSSE } from "@/api/send_chat";
 import { fetchTools, updateToolStatus } from "@/api/status_update";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 
 /* map backend name -> nice icon */
 const iconMap = {
@@ -58,7 +59,15 @@ export default function PromptInput({
   const [tools, setTools] = useState([]);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [showPlaceholder, setShowPlaceholder] = useState(true);
-  const inputRef = useRef(null);
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    if (!textareaRef.current) return;
+
+    textareaRef.current.style.height = "auto";
+    textareaRef.current.style.height =
+      Math.min(textareaRef.current.scrollHeight, 160) + "px";
+  }, [value]);
 
   /* ----------  fetch real tools once  ---------- */
   useEffect(() => {
@@ -110,31 +119,33 @@ export default function PromptInput({
 
   /* ----------  send message  ---------- */
   const onSend = async () => {
+    setShowPlaceholder(true)
     if (!value.trim() || !threadId) return;
+
     const prompt = value.trim();
     setValue("");
-    setShowPlaceholder(true);
     addUserMessage(prompt);
+
     const assistant = appendAssistantMessage();
 
-    try {
-      const res = await sendChat({ threadId, query: prompt });
-      streamText(res.content, assistant);
-    } catch {
-      streamText("⚠️ Something went wrong. Please try again.", assistant);
-    }
-  };
+    let textBuffer = "";
 
-  /* ----------  fake typewriter  ---------- */
-  const streamText = (fullText, assistant) => {
-    let i = 0;
-    const timer = setInterval(() => {
-      assistant.updateText(fullText.slice(0, i++));
-      if (i > fullText.length) {
-        clearInterval(timer);
-        assistant.finish();
-      }
-    }, 12);
+    try {
+      await sendChatSSE({
+        threadId,
+        query: prompt,
+        onToken: (token) => {
+          textBuffer += token;
+          assistant.updateText(textBuffer);
+        },
+        onDone: () => {
+          assistant.finish();
+        },
+      });
+    } catch (e) {
+      assistant.updateText("⚠️ Something went wrong.");
+      assistant.finish();
+    }
   };
 
   /* ----------  skeleton while loading  ---------- */
@@ -180,36 +191,50 @@ export default function PromptInput({
             {tools.map((t) => {
               const Icon = t.icon;
               return (
-                <div
-                  key={t.name}
-                  className="flex items-center gap-2 rounded px-2 py-1.5 text-sm"
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <div className="flex-1">
-                    <div className="font-medium">{t.label}</div>
-                    <div className="text-xs text-muted-foreground line-clamp-2">
-                      {t.description}
-                    </div>
-                    {/* badges row */}
-                    <div className="mt-1 flex items-center gap-2">
-                      {/* global status (read-only) */}
-                      <Badge
-                        variant={t.globalStatus === "active" ? "default" : "secondary"}
-                        className="text-[10px] px-2 py-0"
-                      >
-                        {t.globalStatus}
-                      </Badge>
-
-                      {/* user status (clickable) */}
-                      <Badge
-                        variant={t.userStatus === "allowed" ? "default" : "destructive"}
-                        className="cursor-pointer text-[10px] px-2 py-0"
-                        onClick={() => toggleUserStatus(t.name)}
-                      >
-                        {t.userStatus}
-                      </Badge>
+                <div key={t.id}>
+                  <div className="flex items-center gap-2 rounded px-2 py-1.5 text-sm">
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <div className="flex-1">
+                      <div className="font-medium">{t.label}</div>
+                      <div className="text-xs text-muted-foreground line-clamp-2">
+                        {t.description}
+                      </div>
+                      {/* badges row */}
+                      <div className="mt-1 flex items-center gap-2">
+                        {/* global status (read-only) */}
+                        {/* <motion.div
+                          whileHover={{ scale: 1.25 }}
+                          transition={{
+                            scale: { type: "spring", stiffness: 300, damping: 10 }
+                          }}
+                        >   */}
+                          <Badge
+                            variant={t.globalStatus === "active" ? "default" : "secondary"}
+                            className="text-[10px] px-2 py-0"
+                          >
+                            {t.globalStatus}
+                          </Badge>
+                        {/* </motion.div> */}
+    
+                        {/* user status (clickable) */}
+                        <motion.div
+                          whileHover={{ scale: 1.25 }}
+                          transition={{
+                            scale: { type: "spring", stiffness: 300, damping: 10 }
+                          }}
+                        >  
+                          <Badge
+                            variant={t.userStatus === "allowed" ? "default" : "destructive"}
+                            className="cursor-pointer text-[10px] px-2 py-0"
+                            onClick={() => toggleUserStatus(t.name)}
+                          >
+                            {t.userStatus}
+                          </Badge>
+                        </motion.div>
+                      </div>
                     </div>
                   </div>
+                  <Separator />
                 </div>
               );
             })}
@@ -219,10 +244,11 @@ export default function PromptInput({
 
       {/* ==========  INPUT WITH ICONS INSIDE  ========== */}
       <div className="relative flex items-center">
-        <Input
-          ref={inputRef}
-          placeholder=""
+        <Textarea
+          ref={textareaRef}
           value={value}
+          rows={1}
+          placeholder=""
           onChange={(e) => {
             setValue(e.target.value);
             setShowPlaceholder(e.target.value.length === 0);
@@ -233,7 +259,15 @@ export default function PromptInput({
               onSend();
             }
           }}
-          className="rounded-2xl px-11 py-6 text-sm placeholder:text-transparent"
+          className="
+            resize-none
+            rounded-2xl
+            px-11
+            text-sm
+            leading-6
+            overflow-hidden
+            placeholder:text-transparent
+          "
         />
         {showPlaceholder && (
         <svg
