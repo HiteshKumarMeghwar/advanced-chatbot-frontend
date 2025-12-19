@@ -214,10 +214,11 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
   /* 3.  responsive classes – desktop permanent, mobile absolute overlay */
   return (
     <aside
-      className={`
-        fixed inset-y-0 left-0 z-40 w-64 border-r bg-card flex flex-col
+      className="
+        fixed inset-y-0 left-0 z-40 w-64 border-r bg-card
+        flex flex-col h-screen
         md:relative md:inset-auto md:z-auto
-      `}
+      "
     >
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
@@ -291,71 +292,79 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
 
       <Separator />
 
-      <div className="text-center p-4">
-        <FileUploadDrawer 
-          threadId={activeThreadId}
+      <div className="flex-1 min-h-0 m-4 flex flex-col">
+        {/* ----- Document Upload System ----- */}
+        <div className="mb-3">
+          <FileUploadDrawer 
+            threadId={activeThreadId}
 
-          onUploadComplete={async () => {
-            setLoading(true);
-            try {
-              const updatedThreads = await fetchThreads();
-              setThreads(updatedThreads);
-            } catch (err) {
-              console.error(err);
-            } finally {
-              setLoading(false);
-            }
-          }}
-        />
-      </div>
-      
-      {/* ----- Documents for ACTIVE thread ----- */}
-      <div className="mb-3">
-        <span className="text-xs font-semibold uppercase text-muted-foreground ml-3">Uploaded Documents</span>
-      </div>
-      <div className="m-4">
-        <div className="space-y-1">
-          {(() => {
-            const active = threads.find((t) => t.id === activeThreadId) || threads[0];
-            if (!active?.documents?.length)
-              return (
-                <div className="rounded-lg border border-dashed p-3 my-2 text-center">
-                  <FileText className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
-                  <p className="text-xs text-muted-foreground">No documents yet</p>
-                </div>
-              );
-
-            return (active.documents.map((doc) => {
-              const { icon: Icon, color } = iconByExt(doc.file_type);
-              return (
-                <div key={doc.id} className="group flex items-center gap-3 rounded-lg border bg-card p-3 my-2 shadow-sm hover:shadow transition-shadow">
-                  <Icon className={`h-5 w-5 ${color}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" title={doc.file_name}>{doc.file_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {doc.file_type.toUpperCase()} · {new Date(doc.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <Trash2
-                    className="
-                      h-4 w-4 text-red-500 opacity-0
-                      group-hover:opacity-100 cursor-pointer
-                      transition
-                    "
-
-                    onClick={(e) => {
-                      e.stopPropagation(); // don’t trigger thread switch
-                      handleDeleteDocument(doc.id);
-                    }}
-                  />
-                </div>
-              );
-            }))
-          })()}
+            onUploadComplete={async () => {
+              setLoading(true);
+              try {
+                const updatedThreads = await fetchThreads();
+                setThreads(updatedThreads);
+              } catch (err) {
+                console.error(err);
+              } finally {
+                setLoading(false);
+              }
+            }}
+          />
         </div>
+
+        {/* ----- Documents for ACTIVE thread ----- */}
+        <div className="mb-3">
+          <span className="text-xs font-semibold uppercase text-muted-foreground">Uploaded Documents</span>
+        </div>
+        <ScrollArea className="max-h-[30%] min-h-[6rem] pr-1">
+          <div className="space-y-1">
+            {(() => {
+              const active = threads.find((t) => t.id === activeThreadId) || threads[0];
+              if (!active?.documents?.length)
+                return (
+                  <div className="rounded-lg border border-dashed p-1 m-2 text-center">
+                    <FileText className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
+                    <p className="text-xs text-muted-foreground">No documents yet</p>
+                  </div>
+                );
+
+              return (active.documents.map((doc) => {
+                const { icon: Icon, color } = iconByExt(doc.file_type);
+                return (
+                  <div key={doc.id} className="group flex items-center gap-3 rounded-lg border bg-card p-1 m-2 shadow-sm hover:shadow transition-shadow">
+                    <Icon className={`h-5 w-5 ${color}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" title={doc.file_name}>{doc.file_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {doc.file_type.toUpperCase()} · {new Date(doc.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Button
+                      title="Delete Doc"
+                      variant="ghost"
+                      size="icon"
+                      className="
+                        h-4 w-4 text-red-500 opacity-0
+                        group-hover:opacity-100 cursor-pointer
+                        transition
+                      "
+                      onClick={(e) => {
+                        e.stopPropagation(); // don’t trigger thread switch
+                        handleDeleteDocument(doc.id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                );
+              }))
+            })()}
+          </div>
+        </ScrollArea>
 
         <Separator className="mb-2" />
 
+        {/* ----- Threads title and and list ----- */}
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs font-semibold uppercase text-muted-foreground">Threads</span>
           <motion.div
@@ -369,60 +378,63 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
           </Button>
           </motion.div>
         </div>
-        <div className="space-y-1 pb-5">
-          {loading ? (
-              <p className="text-xs text-center bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 bg-clip-text text-transparent animate-pulse drop-shadow-sm">Loading…</p>
-            ) : threads.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25 }}
-              className="rounded-md border border-dashed p-3 text-center"
-            >
-              <p className="text-xs text-muted-foreground mb-2">
-                No conversations yet
-              </p>
-            </motion.div>
-          ) : (
-            threads.map((t) => (
+        <ScrollArea className="flex-1 min-h-0 pr-1">
+          <div className="space-y-1">
+            {loading ? (
+                <p className="text-xs text-center bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 bg-clip-text text-transparent animate-pulse drop-shadow-sm">Loading…</p>
+              ) : threads.length === 0 ? (
               <motion.div
-                key={t.id}
-                whileHover={{ scale: 1.03 }}
-                transition={{ type: "spring", stiffness: 120, damping: 16 }}
-                className={`
-                  group flex items-center gap-3 rounded-lg border bg-card p-1 my-2 shadow-sm hover:shadow transition-shadow
-                  ${
-                    activeThreadId === t.id
-                      ? "bg-primary/10 shadow-sm ring-1 ring-primary/30"
-                      : "hover:bg-muted"
-                  }
-                `}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="rounded-md border border-dashed p-3 text-center"
               >
-                {/* left side – title */}
-                <Button
-                  title={t.title || "Untitled Thread"}
-                  variant="ghost"
-                  onClick={() => handleThreadClick(t.id)}
-                  className="flex-1 justify-start text-left"
-                >
-                  {truncateTitle(t.title, 20)}
-                </Button>
-                {/* right side – trash */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-red-500 opacity-0 group-hover:opacity-100 transition"
-                  onClick={(e) => {
-                    e.stopPropagation(); // don’t trigger thread switch
-                    handleDeleteThread(t.id);
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <p className="text-xs text-muted-foreground mb-2">
+                  No conversations yet
+                </p>
               </motion.div>
-            ))
-          )}
-        </div>
+            ) : (
+              threads.map((t) => (
+                <motion.div
+                  key={t.id}
+                  whileHover={{ scale: 1.03 }}
+                  transition={{ type: "spring", stiffness: 120, damping: 16 }}
+                  className={`
+                    group flex items-center gap-3 rounded-lg border bg-card p-1 m-2 shadow-sm hover:shadow transition-shadow
+                    ${
+                      activeThreadId === t.id
+                        ? "bg-primary/10 shadow-sm ring-1 ring-primary/30"
+                        : "hover:bg-muted"
+                    }
+                  `}
+                >
+                  {/* left side – title */}
+                  <Button
+                    title={t.title || "Untitled Thread"}
+                    variant="ghost"
+                    onClick={() => handleThreadClick(t.id)}
+                    className="flex-1 justify-start text-left"
+                  >
+                    {truncateTitle(t.title, 18)}
+                  </Button>
+                  {/* right side – trash */}
+                  <Button
+                    title="Delete Thread"
+                    variant="ghost"
+                    size="icon"
+                    className="text-red-500 opacity-0 group-hover:opacity-100 transition"
+                    onClick={(e) => {
+                      e.stopPropagation(); // don’t trigger thread switch
+                      handleDeleteThread(t.id);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </motion.div>
+              ))
+            )}
+          </div>
+        </ScrollArea>
       </div>
     </aside>
   );

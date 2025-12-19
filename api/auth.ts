@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const API_URL = process.env.NEXT_PUBLIC_API_URL as string;
 
 
 export async function register(name: string, email: string, password: string) {
@@ -90,13 +90,13 @@ export async function refreshUserToken() {
 }
 
 
-export async function forgotPassword(email: string) {
+export async function forgotPassword(email: string, flag: string) {
     const res = await fetch(
         `${API_URL}/auth/forgot-password`,
         {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, flag }),
         }
     );
 
@@ -110,13 +110,13 @@ export async function forgotPassword(email: string) {
 }
 
 
-export async function resetPassword(token: string, password: string) {
+export async function resetPassword(token: string, password: string, flag: string) {
     const res = await fetch(
         `${API_URL}/auth/reset-password`,
         {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, new_password: password }),
+        body: JSON.stringify({ token, new_password: password, flag }),
         }
     );
 
@@ -138,4 +138,22 @@ export async function resetPassword(token: string, password: string) {
     }
 
     return data;
+}
+
+
+export async function googleAuth(idToken: string) {
+  const res = await fetch(`${API_URL}/auth/google`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ token: idToken }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.detail || "Google authentication failed");
+  }
+
+  return data;
 }

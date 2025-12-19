@@ -10,26 +10,27 @@ import { forgotPassword } from "@/api/auth";
 export default function ForgotPasswordPage() {
   const searchParams = useSearchParams();
   const email = searchParams.get("email");
+  const flag = searchParams.get("flag");
 
-  if (!email) {
+  if (!email || !flag) {
     return <MissingEmail />
   }
 
-  return <ForgotPasswordContent email={email} />;
+  return <ForgotPasswordContent email={email} flag={flag} />;
 }
 
 
-function ForgotPasswordContent({ email }) {
+function ForgotPasswordContent({ email, flag }) {
   const router = useRouter();
   const sentRef = useRef(false);
 
   useEffect(() => {
-    if (!email || sentRef.current) return;
+    if (!email || !flag || sentRef.current) return;
     sentRef.current = true;
 
     const sendMail = async () => {
       try {
-        const data = await forgotPassword(email)
+        const data = await forgotPassword(email, flag)
         toast.success(
           data?.detail || "If the email exists, a reset link was sent."
         );

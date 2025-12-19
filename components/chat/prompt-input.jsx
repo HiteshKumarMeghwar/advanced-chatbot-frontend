@@ -242,7 +242,7 @@ export default function PromptInput({
         </PopoverContent>
       </Popover>
 
-      {/* ==========  INPUT WITH ICONS INSIDE  ========== */}
+      {/* ==========  TEXTAREA WITH ICONS INSIDE  ========== */}
       <div className="relative flex items-center">
         <Textarea
           ref={textareaRef}
@@ -252,6 +252,9 @@ export default function PromptInput({
           onChange={(e) => {
             setValue(e.target.value);
             setShowPlaceholder(e.target.value.length === 0);
+            /* -------- auto-height -------- */
+            const lines = e.target.value.split("\n").length;
+            e.target.rows = Math.min(Math.max(lines, 1), 20);
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -265,8 +268,10 @@ export default function PromptInput({
             px-11
             text-sm
             leading-6
-            overflow-hidden
+            overflow-y-auto      /* scroll after 10 lines */
             placeholder:text-transparent
+            min-h-[3rem]         /* single-line height (48 px) */
+            max-h-[15rem]        /* 10 lines x 24 px = 240 px */
           "
         />
         {showPlaceholder && (

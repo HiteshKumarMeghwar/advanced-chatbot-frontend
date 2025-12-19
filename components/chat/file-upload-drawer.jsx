@@ -147,9 +147,10 @@ export default function FileUploadDrawer({ threadId, onUploadComplete }) {
           transition={{
             scale: { type: "spring", stiffness: 80, damping: 15 }, // gentle spring
           }}
+          className="text-center"
         >
         <DialogTrigger>
-          <div className="w-full cursor-pointer rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
+          <div className="group flex items-center gap-3 rounded-lg border bg-card px-4 py-2 shadow-sm hover:shadow transition-shadow">
             <Upload className="mr-2 inline h-4 w-4" />
             Upload Documents
           </div>

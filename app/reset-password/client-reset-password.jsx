@@ -19,12 +19,13 @@ export default function ResetPasswordPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
+  const flag = searchParams.get("flag");
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
 
-  if (!token) {
+  if (!token || !flag) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-gradient-to-br from-sky-50 to-indigo-100 dark:from-gray-900 dark:to-black px-4">
         <Card className="w-full max-w-sm">
@@ -51,8 +52,12 @@ export default function ResetPasswordPage() {
     }
     setLoading(true);
     try {
-      await resetPassword(token, password);
-      toast.success("Congrats! Your password has been changed.");
+      await resetPassword(token, password, flag);
+      if (flag == "local"){
+        toast.success("Congrats! Your password has been changed successfully.");
+      } else {
+        toast.success("Congrats! Your password has been created successfully.");
+      }
       router.replace("/login");
     } catch (err) {
       toast.error(err.message);

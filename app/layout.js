@@ -3,6 +3,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import TopLoader from "@/components/top-loader";
 import ThemeSync from "@/components/theme-sync";
+import Script from "next/script";
 import { Toaster } from "sonner";
 
 const geistSans = Geist({
@@ -39,6 +40,10 @@ export default function RootLayout({ children }) {
           <Toaster position="top-right" richColors />
         </ThemeProvider>
       </body>
+      <Script
+        src="https://accounts.google.com/gsi/client"
+        strategy="afterInteractive"
+      />
     </html>
   );
 }

@@ -13,7 +13,7 @@ import { Chrome } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import GlobalLoading from "@/components/loader";
-import { register } from "@/api/auth"; 
+import { forgotPassword, googleAuth, register } from "@/api/auth"; 
 
 export default function RegisterPage() {
 
@@ -43,12 +43,55 @@ export default function RegisterPage() {
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = () => {
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
+    if (!clientId) {
+      toast.error("Google Client ID not configured");
+      return;
+    }
+
     setGoogleLoading(true);
-    // TODO: trigger your Next-Auth / Firebase / custom OAuth endpoint
-    // Example: await signIn("google");
-    setTimeout(() => setGoogleLoading(false), 1500); // demo
+    setLoading(true);
+
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      ux_mode: "popup",
+      use_fedcm_for_prompt: true,
+      callback: async (response) => {
+        try {
+          if (!response.credential) {
+            throw new Error("No Google credential received");
+          }
+
+          const res = await googleAuth(response.credential);
+          if(res.msg) {
+            const res = await forgotPassword(res.email, "google")
+            if(res.access_token){
+              toast.success("Welcome to MeghX 🚀");
+              toast.success("Please create first your new password.");
+              router.push(`/reset-password?token=${encodeURIComponent(res.access_token)}&flag=google`);
+            }else{
+              toast.success("Welcome to MeghX 🚀");
+              toast.success("Please create first your new password.");
+              router.push("/login")
+            }
+          }else{
+            toast.info("Your gmail is already registered!");
+            router.push("/login")
+          }
+        } catch (err) {
+          toast.error(err?.message || "Google login failed");
+        } finally {
+          setGoogleLoading(false);
+          setLoading(false);
+        }
+      },
+    });
+
+    window.google.accounts.id.prompt();
   };
+
 
   return (
     <>

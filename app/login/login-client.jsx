@@ -88,7 +88,7 @@ export default function LoginPage() {
                 whileHover={{ scale: 1.25 }}
                 transition={{ scale: { type: "spring", stiffness: 300, damping: 10 } }}
               >
-                <Link href={`/forgot-password?email=${encodeURIComponent(email)}`} className="text-xs">
+                <Link href={`/forgot-password?email=${encodeURIComponent(email)}&flag=local`} className="text-xs">
                   Forgot password
                 </Link>
               </motion.p>
