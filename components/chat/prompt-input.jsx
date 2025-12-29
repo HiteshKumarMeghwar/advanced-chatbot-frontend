@@ -51,7 +51,9 @@ export default function PromptInput({
   addUserMessage, 
   appendAssistantMessage, 
   threadId, 
-  waitingForBackend 
+  waitingForBackend,
+  // onInterrupt,
+  // interrupt
 }) {
 
   /* ----------  state  ---------- */
@@ -60,6 +62,17 @@ export default function PromptInput({
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [showPlaceholder, setShowPlaceholder] = useState(true);
   const textareaRef = useRef(null);
+  const abortControllerRef = useRef(null);
+
+  useEffect(() => {
+    // Cleanup on unmount
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current(); // Close active EventSource
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!textareaRef.current) return;
@@ -68,6 +81,15 @@ export default function PromptInput({
     textareaRef.current.style.height =
       Math.min(textareaRef.current.scrollHeight, 160) + "px";
   }, [value]);
+
+  // useEffect(() => {
+  //   const handler = (e) => {
+  //     setValue(e.detail);
+  //     onSend();
+  //   };
+  //   document.addEventListener("send-interrupt-reply", handler);
+  //   return () => document.removeEventListener("send-interrupt-reply", handler);
+  // }, []);
 
   /* ----------  fetch real tools once  ---------- */
   useEffect(() => {
@@ -130,34 +152,61 @@ export default function PromptInput({
 
     let textBuffer = "";
 
+    // Abort any previous stream first
+    if (abortControllerRef.current) {
+      abortControllerRef.current();
+    }
+
     try {
-      await sendChatSSE({
+      const cleanup = sendChatSSE({
         threadId,
         query: prompt,
+
         onToken: (token) => {
           textBuffer += token;
           assistant.updateText(textBuffer);
         },
+
+        onInterrupt: (interruptData) => {
+          textBuffer = interruptData.message || "Awaiting your input...";
+          assistant.updateText(textBuffer);
+          // onInterrupt?.(interruptData);
+        },
+
+        onError: (errorMessage) => {
+          const msg = errorMessage || "⚠️ Something went wrong. Please try again.";
+          assistant.updateText(msg);
+          assistant.finish("error");
+        },
+
         onDone: () => {
+          if (textBuffer.trim()) {
+            assistant.updateText(textBuffer.trim());
+          }
           assistant.finish();
         },
+
       });
+
+      // Store cleanup for next send or unmount
+      abortControllerRef.current = cleanup;
     } catch (e) {
-      assistant.updateText("⚠️ Something went wrong.");
-      assistant.finish();
+      console.error("Failed to start chat stream:", e);
+      assistant.updateText("⚠️ Connection failed. Check your network and try again.");
+      assistant.finish("error");
     }
   };
 
   /* ----------  skeleton while loading  ---------- */
-  if (!tools.length)
-    return (
-      <div className="mx-auto w-full max-w-4xl px-2 sm:px-1">
-        <div className="flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm text-muted-foreground">
-          <Sparkles className="h-4 w-4 animate-pulse" />
-          Loading tools…
-        </div>
-      </div>
-    );
+  // if (!tools.length)
+  //   return (
+  //     <div className="mx-auto w-full max-w-4xl px-2 sm:px-1">
+  //       <div className="flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm text-muted-foreground">
+  //         <Sparkles className="h-4 w-4 animate-pulse" />
+  //         Loading tools…
+  //       </div>
+  //     </div>
+  //   );
 
 
   /* ----------  UI  ---------- */
@@ -187,58 +236,69 @@ export default function PromptInput({
 
         <PopoverContent side="top" align="start" className="w-72 p-2">
           <div className="text-sm font-medium mb-2">Tools</div>
-          <div className="space-y-1 max-h-[60vh] overflow-auto">
-            {tools.map((t) => {
-              const Icon = t.icon;
-              return (
-                <div key={t.id}>
-                  <div className="flex items-center gap-2 rounded px-2 py-1.5 text-sm">
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <div className="flex-1">
-                      <div className="font-medium">{t.label}</div>
-                      <div className="text-xs text-muted-foreground line-clamp-2">
-                        {t.description}
-                      </div>
-                      {/* badges row */}
-                      <div className="mt-1 flex items-center gap-2">
-                        {/* global status (read-only) */}
-                        {/* <motion.div
-                          whileHover={{ scale: 1.25 }}
-                          transition={{
-                            scale: { type: "spring", stiffness: 300, damping: 10 }
-                          }}
-                        >   */}
-                          <Badge
-                            variant={t.globalStatus === "active" ? "default" : "secondary"}
-                            className="text-[10px] px-2 py-0"
-                          >
-                            {t.globalStatus}
-                          </Badge>
-                        {/* </motion.div> */}
-    
-                        {/* user status (clickable) */}
-                        <motion.div
-                          whileHover={{ scale: 1.25 }}
-                          transition={{
-                            scale: { type: "spring", stiffness: 300, damping: 10 }
-                          }}
-                        >  
-                          <Badge
-                            variant={t.userStatus === "allowed" ? "default" : "destructive"}
-                            className="cursor-pointer text-[10px] px-2 py-0"
-                            onClick={() => toggleUserStatus(t.name)}
-                          >
-                            {t.userStatus}
-                          </Badge>
-                        </motion.div>
+          {/* ----------  empty or list  ---------- */}
+          {tools.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-4 text-center">
+              <Sparkles className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
+              <p className="text-xs text-muted-foreground">No tools available</p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Admin will enable them soon
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-1 max-h-[60vh] overflow-auto">
+              {tools.map((t) => {
+                const Icon = t.icon;
+                return (
+                  <div key={t.id}>
+                    <div className="flex items-center gap-2 rounded px-2 py-1.5 text-sm">
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <div className="flex-1">
+                        <div className="font-medium">{t.label}</div>
+                        <div className="text-xs text-muted-foreground line-clamp-2">
+                          {t.description}
+                        </div>
+                        {/* badges row */}
+                        <div className="mt-1 flex items-center gap-2">
+                          {/* global status (read-only) */}
+                          {/* <motion.div
+                            whileHover={{ scale: 1.25 }}
+                            transition={{
+                              scale: { type: "spring", stiffness: 300, damping: 10 }
+                            }}
+                          >   */}
+                            <Badge
+                              variant={t.globalStatus === "active" ? "default" : "secondary"}
+                              className="text-[10px] px-2 py-0"
+                            >
+                              {t.globalStatus}
+                            </Badge>
+                          {/* </motion.div> */}
+      
+                          {/* user status (clickable) */}
+                          <motion.div
+                            whileHover={{ scale: 1.25 }}
+                            transition={{
+                              scale: { type: "spring", stiffness: 300, damping: 10 }
+                            }}
+                          >  
+                            <Badge
+                              variant={t.userStatus === "allowed" ? "default" : "destructive"}
+                              className="cursor-pointer text-[10px] px-2 py-0"
+                              onClick={() => toggleUserStatus(t.name)}
+                            >
+                              {t.userStatus}
+                            </Badge>
+                          </motion.div>
+                        </div>
                       </div>
                     </div>
+                    <Separator />
                   </div>
-                  <Separator />
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </PopoverContent>
       </Popover>
 
@@ -257,6 +317,7 @@ export default function PromptInput({
             e.target.rows = Math.min(Math.max(lines, 1), 20);
           }}
           onKeyDown={(e) => {
+            if (waitingForBackend) return;  
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               onSend();
@@ -301,7 +362,7 @@ export default function PromptInput({
         {/* send button inside right edge */}
         <Button
           size="icon"
-          onClick={onSend}
+          onClick={waitingForBackend ? undefined : onSend}
           disabled={!value.trim() || waitingForBackend}   // ← disable + hide when busy
           className="absolute right-2 top-1/2 -translate-y-1/2"
         >

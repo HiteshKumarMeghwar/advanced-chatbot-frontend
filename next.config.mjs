@@ -2,9 +2,9 @@
 const nextConfig = {
   /* config options here */
   reactCompiler: true,
-  experimental: {
-    globalNotFound: true,
-  },
+  // experimental: {
+  //   globalNotFound: true,
+  // },
 };
 
 export default nextConfig;

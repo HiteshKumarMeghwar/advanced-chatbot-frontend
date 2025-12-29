@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+
 @layer components {
   /* ======  Markdown tables  ====== */
   .prose table {

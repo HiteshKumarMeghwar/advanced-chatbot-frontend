@@ -11,6 +11,7 @@ import Image from 'next/image'
 import { motion } from "framer-motion";
 import Snowflakes from "./snow-flakes"
 import { v4 as uuidv4 } from "uuid";
+// import InterruptModal from "@/components/chat/interrupt-modal";
 
 
 export default function ChatPage() {
@@ -19,6 +20,7 @@ export default function ChatPage() {
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [streamingMessageId, setStreamingMessageId] = useState(null);
   const [waitingForBackend, setWaitingForBackend] = useState(false);
+  // const [interrupt, setInterrupt] = useState(null);
 
   const scrollRef  = useRef(null);
   const bottomRef  = useRef(null);
@@ -194,10 +196,28 @@ export default function ChatPage() {
             appendAssistantMessage={appendAssistantMessage}
             threadId={activeThreadId}
             waitingForBackend={waitingForBackend}
+            // onInterrupt={(data) => setInterrupt(data)}
+            // interrupt={interrupt}
           />
         </div>
         {/* <Footer /> */}
       </div>
+      {/* {interrupt && (
+        <InterruptModal
+          interrupt={interrupt}
+          onSelect={(reply) => {
+            setInterrupt(null);
+            addUserMessage(reply);
+            setTimeout(() => {
+              // resend reply through same pipeline
+              document.dispatchEvent(new CustomEvent("send-interrupt-reply", {
+                detail: reply,
+              }));
+            }, 0);
+          }}
+          onClose={() => setInterrupt(null)}
+        />
+      )} */}
     </div>
   );
 }

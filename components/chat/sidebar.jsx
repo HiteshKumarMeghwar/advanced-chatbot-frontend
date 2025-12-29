@@ -21,6 +21,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { userProfile } from "@/api/auth";
 
 export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId }) {
   const [threads, setThreads] = useState([]);
@@ -28,14 +29,18 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
   const [createOpen, setCreateOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
+  const [userData, setUserData] = useState({})
   const router = useRouter();
 
-  useEffect(() => {
-    if (!loading && threads.length > 0 && !activeThreadId) {
-      // auto-open the top (most recent) thread
-      handleThreadClick(threads[0].id);
+  async function fetchUser() {
+    try {
+      const res = await userProfile();
+      const data = await res.json();
+      setUserData(data)
+    } catch (e) {
+      console.log(e)
     }
-  }, [loading, threads, activeThreadId]);
+  }
 
   // fetch threads on mount
   useEffect(() => {
@@ -66,7 +71,16 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
     };
 
     initThreads();
+    fetchUser();
   }, [open]);
+
+
+   useEffect(() => {
+    if (!loading && threads.length > 0 && !activeThreadId) {
+      // auto-open the top (most recent) thread
+      handleThreadClick(threads[0].id);
+    }
+  }, [loading, threads, activeThreadId]);
 
 
   /* 1.  auto-close when we resize to mobile */
@@ -209,7 +223,7 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
     return text.length > max ? text.slice(0, max) + "…" : text;
   };
 
-  const user = { name: "MeghX", email: "meghx@gmail.com" };
+  const user = { name: userData.name || "MeghX", email: userData.email || "meghx@gmail.com" };
 
   /* 3.  responsive classes – desktop permanent, mobile absolute overlay */
   return (

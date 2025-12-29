@@ -183,7 +183,9 @@ export default function ChatMessage({ role, text, raw, isStreaming  }) {
                     <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-200">{children}</h3>
                   </div>
                 ),
+                // Lists
                 ul: ({ children }) => <ul className="list-none space-y-2 ml-4">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal pl-6 space-y-1">{children}</ol>,
                 li: ({ children }) => (
                   <li className="flex items-start gap-2">
                     <span className="mt-1 text-indigo-500">
@@ -223,10 +225,6 @@ export default function ChatMessage({ role, text, raw, isStreaming  }) {
                 ),
                 // Paragraphs
                 p: ({ children }) => <p className="text-sm md:text-base leading-relaxed my-2">{children}</p>,
-                // Lists
-                ul: ({ children }) => <ul className="list-disc pl-6 space-y-1">{children}</ul>,
-                ol: ({ children }) => <ol className="list-decimal pl-6 space-y-1">{children}</ol>,
-                li: ({ children }) => <li className="my-1">{children}</li>,
                 // Tables
                 table: ({ children }) => (
                   <div className="overflow-x-auto my-2">
