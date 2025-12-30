@@ -62,7 +62,7 @@ export default function ChatMessage({ role, text, raw, isStreaming  }) {
         className={cn(
           "grid h-9 w-9 place-items-center rounded-full shrink-0",
           isUser
-            ? "bg-primary text-primary-foreground"
+            ? "bg-gradient-to-br from-indigo-500/20 to-purple-500/20 ring-1 ring-border"
             : "bg-gradient-to-br from-indigo-500/20 to-purple-500/20 ring-1 ring-border"
         )}
       >
@@ -75,7 +75,7 @@ export default function ChatMessage({ role, text, raw, isStreaming  }) {
           className={cn(
             "relative rounded-2xl px-5 py-4 shadow-sm",
             isUser
-              ? "bg-primary text-primary-foreground ml-auto"
+              ? "bg-muted/60 border backdrop-blur"
               : "bg-muted/60 border backdrop-blur"
           )}
         >
@@ -253,7 +253,7 @@ export default function ChatMessage({ role, text, raw, isStreaming  }) {
           </div>
         </div>
 
-        {!isUser && (
+        {!isUser ? (
           <div className="mt-2 flex items-center gap-1 text-muted-foreground">
             <Button variant="ghost" size="xs" onClick={() => setFeedback("up")}>
               <ThumbsUp className="h-4 w-4" />
@@ -261,6 +261,12 @@ export default function ChatMessage({ role, text, raw, isStreaming  }) {
             <Button variant="ghost" size="xs" onClick={() => setFeedback("down")}>
               <ThumbsDown className="h-4 w-4" />
             </Button>
+            <Button variant="ghost" size="xs" onClick={copyText}>
+              {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          </div>
+        ): (
+          <div className="flex-row-reverse mt-2 flex items-center gap-1 text-muted-foreground">
             <Button variant="ghost" size="xs" onClick={copyText}>
               {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
             </Button>

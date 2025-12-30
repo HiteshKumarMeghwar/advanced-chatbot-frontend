@@ -17,6 +17,11 @@ import {
   DollarSign,
   HelpCircle,
   X,
+  Mic,
+  Image,
+  Server,
+  UserCircle,
+  Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,10 +30,18 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { sendChatSSE } from "@/api/send_chat";
 import { fetchTools, updateToolStatus } from "@/api/status_update";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { MCPModal } from "./add_mcp_server";
+import { fetchMcpServers, createMcpServer, deleteMcpServer, refreshTools } from "@/api/mcp_server";
+import { toast } from "sonner";
 
 /* map backend name -> nice icon */
 const iconMap = {
@@ -61,6 +74,10 @@ export default function PromptInput({
   const [tools, setTools] = useState([]);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [showPlaceholder, setShowPlaceholder] = useState(true);
+  const [mcpOpen, setMcpOpen] = useState(false);
+  const [savingMcp, setSavingMcp] = useState(false);
+  const [deletingMcp, setDeletingMcp] = useState(false);
+  const [mcpServers, setMcpServers] = useState([]);
   const textareaRef = useRef(null);
   const abortControllerRef = useRef(null);
 
@@ -93,25 +110,7 @@ export default function PromptInput({
 
   /* ----------  fetch real tools once  ---------- */
   useEffect(() => {
-    fetchTools()
-      // fetchTools ALREADY returns the parsed JSON
-      .then((data) => {
-        const list = data.tools || [];
-        const normalized = list.map((t) => ({
-          id: t.id,
-          name: t.name,
-          label: t.name.replace(/_/g, " "),
-          description: t.description,
-          icon: iconMap[t.name] || Sparkles,
-          globalStatus: t.status,
-          userStatus: t.user_tool_status,
-        }));
-        setTools(normalized);
-      })
-      .catch((err) => {
-        console.error("fetchTools failed", err);
-        setTools([]);
-      });
+    loadTools();
   }, []);
 
 
@@ -197,6 +196,113 @@ export default function PromptInput({
     }
   };
 
+  // ---------- Fetch servers on mount ----------
+  useEffect(() => {
+    const loadServers = async () => {
+      try {
+        const servers = await fetchMcpServers();
+        const list = Object.entries(servers).map(([name, config]) => ({ name, ...config }));
+        setMcpServers(list);
+      } catch (err) {
+        toast.error("Failed to load MCP servers");
+      }
+    };
+    loadServers();
+  }, [mcpOpen]);
+
+  // ---------- Save & Reload ----------
+  const onSaveReload = async (payload) => {
+    try {
+      setSavingMcp(true);
+      await createMcpServer(payload);
+      await refreshTools();
+      await loadTools();
+      toast.success(`Server "${payload.name}" added`);
+
+      // reload server list
+      const servers = await fetchMcpServers();
+      const list = Object.entries(servers).map(([name, config]) => ({ name, ...config }));
+      setMcpServers(list);
+
+      // setMcpOpen(false);
+    } catch (err) {
+      toast.error(err.message || "Failed to save MCP server");
+    } finally {
+      setSavingMcp(false);
+    }
+  };
+
+  // ---------- Delete ----------
+  const handleDelete = async (name) => {
+    try {
+      setDeletingMcp(true);
+      const res = await deleteMcpServer(name);
+      
+      // Create toast content
+      const {
+        message,
+        deleted_tools_count = 0,
+        deleted_tools = [],
+      } = res;
+
+      const toastContent = (
+        <div>
+          <strong>{message}</strong>
+
+          <div style={{ marginTop: "4px", fontSize: "13px", opacity: 0.9 }}>
+            {deleted_tools_count > 0
+              ? `${deleted_tools_count} tool${deleted_tools_count > 1 ? "s" : ""} revoked for this user`
+              : "No user tools were linked to this server"}
+          </div>
+
+          {deleted_tools_count > 0 && (
+            <ul style={{ marginTop: "6px", paddingLeft: "18px" }}>
+              {deleted_tools.map((tool) => (
+                <li key={tool}>{tool}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      );
+
+      await loadTools();
+      toast.success(toastContent, { duration: 5000 });
+
+      // reload server list
+      const servers = await fetchMcpServers();
+      const list = Object.entries(servers).map(([name, config]) => ({ name, ...config }));
+      setMcpServers(list);
+    } catch (err) {
+      toast.error(err.message || "Failed to delete MCP server");
+    } finally {
+      setDeletingMcp(false);
+    }
+  };
+
+
+  const loadTools = async () => {
+    try {
+      const data = await fetchTools();
+      const list = data.tools || [];
+
+      const normalized = list.map((t) => ({
+        id: t.id,
+        name: t.name,
+        label: t.name.replace(/_/g, " "),
+        description: t.description,
+        icon: iconMap[t.name] || Sparkles,
+        globalStatus: t.status,
+        userStatus: t.user_tool_status,
+      }));
+
+      setTools(normalized);
+    } catch (err) {
+      console.error("fetchTools failed", err);
+      setTools([]);
+    }
+  };
+
+
   /* ----------  skeleton while loading  ---------- */
   // if (!tools.length)
   //   return (
@@ -212,13 +318,25 @@ export default function PromptInput({
   /* ----------  UI  ---------- */
   return (
     <div className="relative mx-auto w-full max-w-4xl px-2 sm:px-1">
+
+      {/* MCP Modal */}
+      <MCPModal
+        open={mcpOpen}
+        onClose={() => setMcpOpen(false)}
+        onSaveReload={onSaveReload}
+        servers={mcpServers}
+        loading={savingMcp}
+        onDelete={handleDelete}
+        delLoading={deletingMcp}
+      />
+
       {/* ==========  TOOLS POPOVER  ========== */}
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="ghost"
             size="sm"
-            title="Active/Inactive - Tools"
+            title="Agents"
             className="absolute left-3 top-1/2 -translate-y-1/2 z-10"
           >
             <motion.div
@@ -234,71 +352,125 @@ export default function PromptInput({
           </Button>
         </PopoverTrigger>
 
-        <PopoverContent side="top" align="start" className="w-72 p-2">
-          <div className="text-sm font-medium mb-2">Tools</div>
-          {/* ----------  empty or list  ---------- */}
-          {tools.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-4 text-center">
-              <Sparkles className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
-              <p className="text-xs text-muted-foreground">No tools available</p>
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Admin will enable them soon
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-1 max-h-[60vh] overflow-auto">
-              {tools.map((t) => {
-                const Icon = t.icon;
-                return (
-                  <div key={t.id}>
-                    <div className="flex items-center gap-2 rounded px-2 py-1.5 text-sm">
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <div className="flex-1">
-                        <div className="font-medium">{t.label}</div>
-                        <div className="text-xs text-muted-foreground line-clamp-2">
-                          {t.description}
+        <PopoverContent side="top" align="start" className="w-14 p-2 space-y-2">
+          {/* TOOLS ICON (hover opens existing tools popover) */}
+          <HoverCard>
+            <HoverCardTrigger asChild>
+              <Button variant="ghost" size="icon" title="Active/Inactive - Tools">
+                <Wrench className="h-5 w-5" />
+              </Button>
+            </HoverCardTrigger>
+            <HoverCardContent side="right" className="w-72 p-2">
+              <div className="text-sm font-medium mb-2">Tools</div>
+              {/* ----------  empty or list  ---------- */}
+              {tools.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-4 text-center">
+                  <Sparkles className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
+                  <p className="text-xs text-muted-foreground">No tools available</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Admin will enable them soon
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1 mb-2 max-h-[60vh] overflow-auto">
+                  {tools.map((t) => {
+                    const Icon = t.icon;
+                    return (
+                      <div key={t.id}>
+                        <div className="flex items-center gap-2 rounded px-2 py-1.5 text-sm">
+                          <Icon className="h-4 w-4 shrink-0" />
+                          <div className="flex-1">
+                            <div className="font-medium">{t.label}</div>
+                            <div className="text-xs text-muted-foreground line-clamp-2">
+                              {t.description}
+                            </div>
+                            {/* badges row */}
+                            <div className="mt-1 flex items-center gap-2">
+                              {/* global status (read-only) */}
+                              {/* <motion.div
+                                whileHover={{ scale: 1.25 }}
+                                transition={{
+                                  scale: { type: "spring", stiffness: 300, damping: 10 }
+                                }}
+                              >   */}
+                                <Badge
+                                  variant={t.globalStatus === "active" ? "default" : "secondary"}
+                                  className="text-[10px] px-2 py-0"
+                                >
+                                  {t.globalStatus}
+                                </Badge>
+                              {/* </motion.div> */}
+          
+                              {/* user status (clickable) */}
+                              <motion.div
+                                whileHover={{ scale: 1.25 }}
+                                transition={{
+                                  scale: { type: "spring", stiffness: 300, damping: 10 }
+                                }}
+                              >  
+                                <Badge
+                                  variant={t.userStatus === "allowed" ? "default" : "destructive"}
+                                  className="cursor-pointer text-[10px] px-2 py-0"
+                                  onClick={() => toggleUserStatus(t.name)}
+                                >
+                                  {t.userStatus}
+                                </Badge>
+                              </motion.div>
+                            </div>
+                          </div>
                         </div>
-                        {/* badges row */}
-                        <div className="mt-1 flex items-center gap-2">
-                          {/* global status (read-only) */}
-                          {/* <motion.div
-                            whileHover={{ scale: 1.25 }}
-                            transition={{
-                              scale: { type: "spring", stiffness: 300, damping: 10 }
-                            }}
-                          >   */}
-                            <Badge
-                              variant={t.globalStatus === "active" ? "default" : "secondary"}
-                              className="text-[10px] px-2 py-0"
-                            >
-                              {t.globalStatus}
-                            </Badge>
-                          {/* </motion.div> */}
-      
-                          {/* user status (clickable) */}
-                          <motion.div
-                            whileHover={{ scale: 1.25 }}
-                            transition={{
-                              scale: { type: "spring", stiffness: 300, damping: 10 }
-                            }}
-                          >  
-                            <Badge
-                              variant={t.userStatus === "allowed" ? "default" : "destructive"}
-                              className="cursor-pointer text-[10px] px-2 py-0"
-                              onClick={() => toggleUserStatus(t.name)}
-                            >
-                              {t.userStatus}
-                            </Badge>
-                          </motion.div>
-                        </div>
+                        <Separator />
                       </div>
-                    </div>
-                    <Separator />
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                    );
+                  })}
+                </div>
+              )}
+            </HoverCardContent>
+          </HoverCard>
+
+          {/* ACCOUNTS ICON */}
+          <HoverCard>
+            <HoverCardTrigger asChild>
+              <Button variant="ghost" size="icon" title="Accounts">
+                <UserCircle className="h-5 w-5" />
+              </Button>
+            </HoverCardTrigger>
+            <HoverCardContent side="right" className="w-56 p-2">
+              <div className="text-sm font-medium mb-2">Accounts</div>
+              {["Facebook", "Gmail", "GitHub", "Twitter"].map((item) => (
+                <div
+                  key={item}
+                  className="rounded px-2 py-1 text-sm hover:bg-muted cursor-pointer"
+                >
+                  {item}
+                </div>
+              ))}
+            </HoverCardContent>
+          </HoverCard>
+
+          {/* IMAGE UPLOAD */}
+          <label>
+            <input
+              type="file"
+              hidden
+              accept="image/*,.pdf,.doc,.docx"
+              onChange={(e) => console.log(e.target.files)}
+            />
+            <Button variant="ghost" size="icon" title="Upload Image">
+              <Image className="h-5 w-5" />
+            </Button>
+          </label>
+
+          {/* MCP REMOTE SERVERS */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setMcpOpen(true)}
+            title="Add MCP Sever"
+          >
+            <Server className="h-5 w-5" />
+          </Button>
+
         </PopoverContent>
       </Popover>
 
@@ -358,6 +530,35 @@ export default function PromptInput({
           </defs>
         </svg>
         )}
+
+        {/* vioce button inside right edge */}
+        <Button
+          size="icon"
+          variant="ghost"
+          title="Voice input (coming soon)"
+          className="absolute right-12 top-1/2 -translate-y-1/2"
+          onClick={waitingForBackend ? undefined : onSend}
+          disabled={value.trim() || waitingForBackend}   // ← disable + hide when busy
+        >
+          <motion.div
+            whileHover={{ scale: 1.25 }}
+            transition={{
+              scale: { type: "spring", stiffness: 300, damping: 10 },
+              rotate: { duration: 0.2 },
+            }}
+          >
+            {waitingForBackend ? (
+              /* -------  tiny loader  ------- */
+              <div className="flex h-5 w-5 items-center justify-center">
+                <span className="sr-only">Loading</span>
+                <span className="h-2 w-2 rounded-full bg-purple-500 animate-ping absolute" />
+                <span className="h-2 w-2 rounded-full bg-purple-600" />
+              </div>
+            ) : (
+              <Mic className="h-5 w-5" />
+            )}
+          </motion.div>
+        </Button>
 
         {/* send button inside right edge */}
         <Button

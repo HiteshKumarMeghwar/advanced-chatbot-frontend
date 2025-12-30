@@ -115,11 +115,11 @@ export default function ChatPage() {
         {/* messages */}
         <ScrollArea className="flex-1 py-4" ref={scrollRef}>
           <div className="mx-auto w-full max-w-4xl px-2 sm:px-4">
+            <Snowflakes />
+            <SnowFall />
             {messages.length === 0 ? (
               // ---------- Empty state ----------
               <>
-                <Snowflakes />
-                <SnowFall />
                 <motion.div
                   initial={{ opacity: 0, y: 40 }}
                   animate={{ opacity: 1, y: 0 }}
