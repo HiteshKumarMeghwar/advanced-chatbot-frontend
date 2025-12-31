@@ -40,6 +40,9 @@ import { fetchTools, updateToolStatus } from "@/api/status_update";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { MCPModal } from "./add_mcp_server";
+import { transcribeVoice } from "@/api/voice";
+import { parseImage } from "@/api/image";
+import LoadingModal from "@/components/chat/prompt-loading-modal";
 import { fetchMcpServers, createMcpServer, deleteMcpServer, refreshTools } from "@/api/mcp_server";
 import { toast } from "sonner";
 
@@ -78,8 +81,23 @@ export default function PromptInput({
   const [savingMcp, setSavingMcp] = useState(false);
   const [deletingMcp, setDeletingMcp] = useState(false);
   const [mcpServers, setMcpServers] = useState([]);
+  const [recording, setRecording] = useState(false);
+  const [sttLoading, setSttLoading] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
   const textareaRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const silenceStartRef = useRef(null);
+  const vadIntervalRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  const SILENCE_THRESHOLD = 0.01; // energy floor
+  const SILENCE_DURATION = 4500;  // ms before auto-stop
+  const VAD_INTERVAL = 200;       // ms sampling
+
 
   useEffect(() => {
     // Cleanup on unmount
@@ -114,7 +132,7 @@ export default function PromptInput({
   }, []);
 
 
-  /* ----------  optimistic toggle (user status only)  ---------- */
+  /* ----------  optimistic toggle (user status only)  ---------- */ // ..............................
   const toggleUserStatus = async (name) => {
     const tool = tools.find((t) => t.name === name);
     if (!tool) return;
@@ -138,12 +156,15 @@ export default function PromptInput({
   };
 
 
-  /* ----------  send message  ---------- */
-  const onSend = async () => {
+  /* ----------  send message  ---------- */ // ..............................................................
+  const onSend = async (overrideText) => {
+    const prompt = (typeof overrideText === 'string' ? overrideText : value).trim();
     setShowPlaceholder(true)
-    if (!value.trim() || !threadId) return;
+    setSttLoading(false)
+    setImageLoading(false)
 
-    const prompt = value.trim();
+    if (!prompt || !threadId) return;
+    
     setValue("");
     addUserMessage(prompt);
 
@@ -190,13 +211,12 @@ export default function PromptInput({
       // Store cleanup for next send or unmount
       abortControllerRef.current = cleanup;
     } catch (e) {
-      console.error("Failed to start chat stream:", e);
       assistant.updateText("⚠️ Connection failed. Check your network and try again.");
       assistant.finish("error");
     }
   };
 
-  // ---------- Fetch servers on mount ----------
+  // ---------- Fetch servers on mount ----------............................................
   useEffect(() => {
     const loadServers = async () => {
       try {
@@ -210,7 +230,7 @@ export default function PromptInput({
     loadServers();
   }, [mcpOpen]);
 
-  // ---------- Save & Reload ----------
+  // ---------- Save & Reload ----------..............................................
   const onSaveReload = async (payload) => {
     try {
       setSavingMcp(true);
@@ -232,7 +252,7 @@ export default function PromptInput({
     }
   };
 
-  // ---------- Delete ----------
+  // ---------- Delete ----------..........................................
   const handleDelete = async (name) => {
     try {
       setDeletingMcp(true);
@@ -279,7 +299,7 @@ export default function PromptInput({
     }
   };
 
-
+  // TOOLS LOADING .......................................................
   const loadTools = async () => {
     try {
       const data = await fetchTools();
@@ -297,8 +317,123 @@ export default function PromptInput({
 
       setTools(normalized);
     } catch (err) {
-      console.error("fetchTools failed", err);
       setTools([]);
+    }
+  };
+
+  // VIOCE INPUT RECODING ......................................
+  const startRecording = async () => {
+    if (recording) return;
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    const mediaRecorder = new MediaRecorder(stream);
+    mediaRecorderRef.current = mediaRecorder;
+    audioChunksRef.current = [];
+
+    // --- AudioContext for VAD ---
+    const audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
+
+    source.connect(analyser);
+
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+    silenceStartRef.current = null;
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      setSttLoading(true)
+      cleanupVAD();
+
+      try {
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const data = await transcribeVoice(blob);
+
+        setValue(data.text);
+        await onSend(data.text);
+      } catch {
+        setSttLoading(false)
+        toast.error("Voice transcription failed");
+      }
+    };
+
+    mediaRecorder.start();
+    setRecording(true);
+
+    startVAD();
+  };
+
+  const startVAD = () => {
+    vadIntervalRef.current = window.setInterval(() => {
+      if (!analyserRef.current) return;
+
+      const buffer = new Float32Array(analyserRef.current.fftSize);
+      analyserRef.current.getFloatTimeDomainData(buffer);
+
+      const energy =
+        buffer.reduce((sum, x) => sum + x * x, 0) / buffer.length;
+
+      const now = Date.now();
+
+      if (energy < SILENCE_THRESHOLD) {
+        if (!silenceStartRef.current) {
+          silenceStartRef.current = now;
+        } else if (now - silenceStartRef.current > SILENCE_DURATION) {
+          stopRecording(); // 🔑 AUTO-STOP
+        }
+      } else {
+        silenceStartRef.current = null;
+      }
+    }, VAD_INTERVAL);
+  };
+
+  const cleanupVAD = () => {
+    if (vadIntervalRef.current) {
+      clearInterval(vadIntervalRef.current);
+      vadIntervalRef.current = null;
+    }
+
+    analyserRef.current?.disconnect();
+    audioContextRef.current?.close();
+
+    analyserRef.current = null;
+    audioContextRef.current = null;
+    silenceStartRef.current = null;
+  };
+
+
+  const stopRecording = () => {
+    if (!mediaRecorderRef.current) return;
+
+    mediaRecorderRef.current.stop();
+    mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+    setRecording(false);
+  };
+
+  const onImagePicked = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageLoading(true); // re-use the same modal
+    setPopoverOpen(false)
+    try {
+      const { text } = await parseImage(file);
+      // --- wrap the raw OCR text with a friendly prompt ---
+      const prompt = `I've converted an image to text - the text originated from an OCR'd image and not need to call rag_tool ok. Please explain/refine the following from you own knowledge:\n\n${text}`;
+
+      setValue(prompt);
+      await onSend(prompt);
+    } catch (err) {
+      toast.error("Image reading failed");
+    } finally {
+      setImageLoading(false);
+      e.target.value = ""; // allow same file again
     }
   };
 
@@ -318,7 +453,7 @@ export default function PromptInput({
   /* ----------  UI  ---------- */
   return (
     <div className="relative mx-auto w-full max-w-4xl px-2 sm:px-1">
-
+    
       {/* MCP Modal */}
       <MCPModal
         open={mcpOpen}
@@ -357,7 +492,15 @@ export default function PromptInput({
           <HoverCard>
             <HoverCardTrigger asChild>
               <Button variant="ghost" size="icon" title="Active/Inactive - Tools">
-                <Wrench className="h-5 w-5" />
+                <motion.div
+                  whileHover={{ scale: 1.25 }}
+                  transition={{
+                    scale: { type: "spring", stiffness: 300, damping: 10 },
+                    rotate: { duration: 0.2 },
+                  }}
+                >
+                  <Wrench className="h-5 w-5" />
+                </motion.div>
               </Button>
             </HoverCardTrigger>
             <HoverCardContent side="right" className="w-72 p-2">
@@ -432,7 +575,15 @@ export default function PromptInput({
           <HoverCard>
             <HoverCardTrigger asChild>
               <Button variant="ghost" size="icon" title="Accounts">
-                <UserCircle className="h-5 w-5" />
+                <motion.div
+                  whileHover={{ scale: 1.25 }}
+                  transition={{
+                    scale: { type: "spring", stiffness: 300, damping: 10 },
+                    rotate: { duration: 0.2 },
+                  }}
+                >
+                  <UserCircle className="h-5 w-5" />
+                </motion.div>
               </Button>
             </HoverCardTrigger>
             <HoverCardContent side="right" className="w-56 p-2">
@@ -451,13 +602,27 @@ export default function PromptInput({
           {/* IMAGE UPLOAD */}
           <label>
             <input
+              ref={fileInputRef}
               type="file"
               hidden
-              accept="image/*,.pdf,.doc,.docx"
-              onChange={(e) => console.log(e.target.files)}
+              accept="image/*"
+              onChange={onImagePicked}
             />
-            <Button variant="ghost" size="icon" title="Upload Image">
-              <Image className="h-5 w-5" />
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Upload Image"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <motion.div
+                whileHover={{ scale: 1.25 }}
+                transition={{
+                  scale: { type: "spring", stiffness: 300, damping: 10 },
+                  rotate: { duration: 0.2 },
+                }}
+              >
+                <Image className="h-5 w-5" />
+              </motion.div>
             </Button>
           </label>
 
@@ -468,7 +633,15 @@ export default function PromptInput({
             onClick={() => setMcpOpen(true)}
             title="Add MCP Sever"
           >
-            <Server className="h-5 w-5" />
+            <motion.div
+              whileHover={{ scale: 1.25 }}
+              transition={{
+                scale: { type: "spring", stiffness: 300, damping: 10 },
+                rotate: { duration: 0.2 },
+              }}
+            >
+              <Server className="h-5 w-5" />
+            </motion.div>
           </Button>
 
         </PopoverContent>
@@ -531,33 +704,66 @@ export default function PromptInput({
         </svg>
         )}
 
-        {/* vioce button inside right edge */}
+        {/* voice button inside right edge */}
         <Button
           size="icon"
           variant="ghost"
-          title="Voice input (coming soon)"
+          title="Voice input"
           className="absolute right-12 top-1/2 -translate-y-1/2"
-          onClick={waitingForBackend ? undefined : onSend}
-          disabled={value.trim() || waitingForBackend}   // ← disable + hide when busy
+          onClick={() => {
+            if (waitingForBackend) return;
+            recording ? stopRecording() : startRecording();
+          }}
+          disabled={value.trim() || waitingForBackend}
         >
-          <motion.div
-            whileHover={{ scale: 1.25 }}
-            transition={{
-              scale: { type: "spring", stiffness: 300, damping: 10 },
-              rotate: { duration: 0.2 },
-            }}
-          >
+          <div className="relative h-5 w-5 flex items-center justify-center">
             {waitingForBackend ? (
-              /* -------  tiny loader  ------- */
+              /* -------  modern loader  ------- */
               <div className="flex h-5 w-5 items-center justify-center">
                 <span className="sr-only">Loading</span>
-                <span className="h-2 w-2 rounded-full bg-purple-500 animate-ping absolute" />
-                <span className="h-2 w-2 rounded-full bg-purple-600" />
+                <div
+                  className="h-4 w-4 rounded-full border-2 border-transparent"
+                  style={{
+                    background: `conic-gradient(from 0deg, #ec4899 0%, #8b5cf6 100%)`,
+                    mask: `radial-gradient(circle 6px at center, transparent 78%, black 80%)`,
+                    WebkitMask: `radial-gradient(circle 6px at center, transparent 78%, black 80%)`,
+                    animation: `spin 1s linear infinite`,
+                  }}
+                />
+                <style jsx>{`
+                  @keyframes spin {
+                    to { transform: rotate(360deg); }
+                  }
+                `}</style>
               </div>
+            ) : recording ? (
+              /* 3-bar sound-wave animation */
+              <>
+                <span className="sr-only">Recording…</span>
+                <div className="flex items-center justify-center gap-0.5 h-4">
+                  {[0, 1, 2].map((i) => (
+                    <span
+                      key={i}
+                      className="w-0.5 rounded-full bg-red-500"
+                      style={{
+                        height: '100%',
+                        animation: `wave 1.2s ease-in-out infinite`,
+                        animationDelay: `${i * 0.15}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+                <style jsx>{`
+                  @keyframes wave {
+                    0%, 100% { transform: scaleY(0.3); }
+                    50% { transform: scaleY(1); }
+                  }
+                `}</style>
+              </>
             ) : (
               <Mic className="h-5 w-5" />
             )}
-          </motion.div>
+          </div>
         </Button>
 
         {/* send button inside right edge */}
@@ -575,11 +781,23 @@ export default function PromptInput({
             }}
           >
             {waitingForBackend ? (
-              /* -------  tiny loader  ------- */
+              /* -------  modern loader  ------- */
               <div className="flex h-5 w-5 items-center justify-center">
                 <span className="sr-only">Loading</span>
-                <span className="h-2 w-2 rounded-full bg-purple-500 animate-ping absolute" />
-                <span className="h-2 w-2 rounded-full bg-purple-600" />
+                <div
+                  className="h-4 w-4 rounded-full border-2 border-transparent"
+                  style={{
+                    background: `conic-gradient(from 0deg, #ec4899 0%, #8b5cf6 100%)`,
+                    mask: `radial-gradient(circle 6px at center, transparent 78%, black 80%)`,
+                    WebkitMask: `radial-gradient(circle 6px at center, transparent 78%, black 80%)`,
+                    animation: `spin 1s linear infinite`,
+                  }}
+                />
+                <style jsx>{`
+                  @keyframes spin {
+                    to { transform: rotate(360deg); }
+                  }
+                `}</style>
               </div>
             ) : (
               <Send className="h-5 w-5" />
@@ -587,6 +805,10 @@ export default function PromptInput({
           </motion.div>
         </Button>
       </div>
+
+      {/* ==========  STT and Image loading modal  ========== */}
+      {sttLoading && <LoadingModal message="Recognising your voice…" />}
+      {imageLoading && <LoadingModal message="Reading image…" />}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { Separator } from "@/components/ui/separator";
@@ -65,7 +66,15 @@ export function MCPModal({ open, onClose, onSaveReload, servers = [], loading, o
                     onClick={() => handleDelete(s.name)}
                     disabled={loading || delLoading}
                   >
-                    <Trash className="h-4 w-4 text-red-500" />
+                    <motion.div
+                      whileHover={{ scale: 1.25 }}
+                      transition={{
+                        scale: { type: "spring", stiffness: 300, damping: 10 },
+                        rotate: { duration: 0.2 },
+                      }}
+                    >
+                      <Trash className="h-4 w-4 text-red-500" />
+                    </motion.div>
                   </Button>
                 </div>
               ))}
@@ -90,12 +99,28 @@ export function MCPModal({ open, onClose, onSaveReload, servers = [], loading, o
             onChange={(e) => setToken(e.target.value)}
           />
           <div className="flex justify-end gap-2 pt-4">
-            <Button variant="secondary" onClick={onClose} disabled={loading || delLoading}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={loading || delLoading}>
-              {loading ? "Saving…" : "Save & Reload"}
-            </Button>
+            <motion.div
+              whileHover={{ scale: 1.25 }}
+              transition={{
+                scale: { type: "spring", stiffness: 300, damping: 10 },
+                rotate: { duration: 0.2 },
+              }}
+            >
+              <Button variant="secondary" onClick={onClose} disabled={loading || delLoading}>
+                Cancel
+              </Button>
+            </motion.div>
+            <motion.div
+              whileHover={{ scale: 1.25 }}
+              transition={{
+                scale: { type: "spring", stiffness: 300, damping: 10 },
+                rotate: { duration: 0.2 },
+              }}
+            >
+              <Button onClick={handleSave} disabled={loading || delLoading}>
+                {loading ? "Saving…" : "Save & Reload"}
+              </Button>
+            </motion.div>
           </div>
         </div>
       </DialogContent>
