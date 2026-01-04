@@ -24,7 +24,7 @@ import {
   CpuChip, Radio, Broadcast, Podcast, Airplay, Cast, Chromecast,
   AppleTv, Television, Monitor, SmartphoneCharging, Battery,
   BatteryCharging, BatteryLow, BatteryFull, Power, PowerOff,
-  Sleep, Wake, BellRing, BellDot, Volume1, Headphones, Headset
+  Sleep, Wake, BellRing, BellDot, Volume1, Headphones, Headset, X
 } from "lucide-react";
 
 
@@ -37,10 +37,17 @@ import rehypeKatex from "rehype-katex";
 import "highlight.js/styles/github-dark.css"; // dark
 import "katex/dist/katex.min.css";
 
-export default function ChatMessage({ role, text, raw, isStreaming  }) {
+export default function ChatMessage({
+  role,
+  text,
+  raw,
+  image_url,
+  isStreaming,
+}) {
   const isUser = role === "user";
   const [feedback, setFeedback] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const showLoader = role === 'assistant' && isStreaming;
 
@@ -71,24 +78,88 @@ export default function ChatMessage({ role, text, raw, isStreaming  }) {
 
       {/* Message */}
       <div className="flex-1 max-w-3xl">
+        {/* ----------  MESSAGE BUBBLE COLOURS  ---------- */}
         <div
           className={cn(
             "relative rounded-2xl px-5 py-4 shadow-sm",
             isUser
-              ? "bg-muted/60 border backdrop-blur"
-              : "bg-muted/60 border backdrop-blur"
+              ? "bg-muted/60 from-indigo-500 to-purple-600" // user
+              : "bg-muted/60 from-indigo-500 to-purple-600" // assistant
           )}
         >
           {showLoader && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500" />
-              </span>
-              Thinking…
+              {/* 3 growing bars */}
+              <div className="flex items-end gap-1 h-5">
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    className="w-1.5 bg-gradient-to-t from-purple-500 to-indigo-500 rounded-full animate-pulse"
+                    style={{
+                      height: "100%",
+                      animation: "think 1.4s ease-in-out infinite",
+                      animationDelay: `${i * 0.2}s`,
+                    }}
+                  />
+                ))}
+              </div>
+              <span className="animate-pulse">Crafting response…</span>
+
+              {/* keyframes once per component */}
+              <style jsx>{`
+                @keyframes think {
+                  0%, 100% { transform: scaleY(0.3); }
+                  50% { transform: scaleY(1); }
+                }
+              `}</style>
             </div>
           )}
           <div className="prose prose-sm sm:prose-base dark:prose-invert max-w-none">
+            {/* ----------  IMAGE THUMBNAIL  ---------- */}
+            {image_url && (
+              <>
+                <div className="mb-3">
+                  <img
+                    src={image_url}
+                    alt="uploaded"
+                    onClick={() => setPreviewOpen(true)}
+                    className="
+                      max-w-xs sm:max-w-sm
+                      rounded-xl
+                      border-2
+                      shadow-md
+                      cursor-pointer
+                      transition
+                      hover:scale-[1.02]
+                      hover:opacity-90
+                      dark:border-gray-700
+                    "
+                  />
+                </div>
+                {/* full-screen modal */}
+                {previewOpen && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+                    onClick={() => setPreviewOpen(false)}  // click backdrop → close
+                  >
+                    <div className="relative">
+                      <img
+                        src={image_url}
+                        alt="full size"
+                        className="max-w-[90vw] max-h-[90vh] object-contain rounded-2xl shadow-2xl"
+                        onClick={(e) => e.stopPropagation()} // keep image clickable
+                      />
+                      <button
+                        onClick={() => setPreviewOpen(false)} // × button → close
+                        className="absolute -top-3 -right-3 grid h-9 w-9 place-items-center rounded-full bg-white/90 hover:bg-white text-gray-800 shadow-lg"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkMath]}
               rehypePlugins={[rehypeHighlight, rehypeKatex]}

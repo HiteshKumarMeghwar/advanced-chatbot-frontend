@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export default function Footer() {
   return (
-    <footer className="border-t bg-card">
+    <footer className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-6 sm:flex-row sm:px-6 lg:px-8">
         
         <motion.p 

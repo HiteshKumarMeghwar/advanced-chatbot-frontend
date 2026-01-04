@@ -41,7 +41,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { MCPModal } from "./add_mcp_server";
 import { transcribeVoice } from "@/api/voice";
-import { parseImage } from "@/api/image";
+import { parseImage, uploadImage } from "@/api/image";
 import LoadingModal from "@/components/chat/prompt-loading-modal";
 import { fetchMcpServers, createMcpServer, deleteMcpServer, refreshTools } from "@/api/mcp_server";
 import { toast } from "sonner";
@@ -84,6 +84,9 @@ export default function PromptInput({
   const [recording, setRecording] = useState(false);
   const [sttLoading, setSttLoading] = useState(false);
   const [imageLoading, setImageLoading] = useState(false);
+  const [ocrText, setOcrText] = useState("");        // extracted text
+  const [imageFile, setImageFile] = useState(null);  // raw File
+  const [imageUrl, setImageUrl] = useState("");      // local preview blob:
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const textareaRef = useRef(null);
@@ -159,15 +162,30 @@ export default function PromptInput({
   /* ----------  send message  ---------- */ // ..............................................................
   const onSend = async (overrideText) => {
     const prompt = (typeof overrideText === 'string' ? overrideText : value).trim();
+    const finalPrompt = ocrText ? `${prompt}\n\n[OCR text from image below]:\n\n ${ocrText}]` : prompt;
+    let uploadedImageUrl = null;
     setShowPlaceholder(true)
     setSttLoading(false)
     setImageLoading(false)
 
-    if (!prompt || !threadId) return;
-    
+    if (!finalPrompt || !threadId) return;
     setValue("");
-    addUserMessage(prompt);
+    setOcrText("");
 
+    if (imageFile) {
+      const res = await uploadImage(imageFile);
+      uploadedImageUrl = res.url;
+    }
+
+    addUserMessage(finalPrompt, uploadedImageUrl);
+
+    if (imageUrl) {
+      URL.revokeObjectURL(imageUrl);
+      setImageUrl("");
+      setImageFile(null);
+    }
+
+    // stream assistant reply (unchanged)
     const assistant = appendAssistantMessage();
 
     let textBuffer = "";
@@ -180,7 +198,8 @@ export default function PromptInput({
     try {
       const cleanup = sendChatSSE({
         threadId,
-        query: prompt,
+        query: finalPrompt,
+        image_url: uploadedImageUrl,
 
         onToken: (token) => {
           textBuffer += token;
@@ -423,12 +442,12 @@ export default function PromptInput({
     setImageLoading(true); // re-use the same modal
     setPopoverOpen(false)
     try {
-      const { text } = await parseImage(file);
-      // --- wrap the raw OCR text with a friendly prompt ---
-      const prompt = `I've converted an image to text - the text originated from an OCR'd image and not need to call rag_tool ok. Please explain/refine the following from you own knowledge:\n\n${text}`;
+      const { text } = await parseImage(file); // OCR
+      const url = URL.createObjectURL(file); // local preview blob
 
-      setValue(prompt);
-      await onSend(prompt);
+      setImageFile(file); // save File for DB upload 
+      setOcrText(text); // keep for later
+      setImageUrl(url);
     } catch (err) {
       toast.error("Image reading failed");
     } finally {
@@ -465,116 +484,181 @@ export default function PromptInput({
         delLoading={deletingMcp}
       />
 
-      {/* ==========  TOOLS POPOVER  ========== */}
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <PopoverTrigger asChild>
+      {/* IMAGE PREVIEW */}
+      {imageUrl && (
+        <div className="mb-2 flex items-center gap-2">
+          <img
+            src={imageUrl}
+            alt="preview"
+            className="h-14 w-14 rounded-lg object-cover border"
+          />
           <Button
+            size="xs"
             variant="ghost"
-            size="sm"
-            title="Agents"
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-10"
+            onClick={() => {
+              URL.revokeObjectURL(imageUrl);
+              setImageUrl("");
+              setImageFile(null);
+              setOcrText("");
+            }}
           >
-            <motion.div
-              whileHover={{ scale: 1.25 }}
-              animate={{ rotate: popoverOpen ? 45 : 0 }}
-              transition={{
-                scale: { type: "spring", stiffness: 300, damping: 10 }, // hover spring
-                rotate: { duration: 0.2 },                             // plus→X speed
-              }}
-            >
-              <Plus className="h-5 w-5" />
-            </motion.div>
+            <X className="h-4 w-4" />
           </Button>
-        </PopoverTrigger>
+        </div>
+      )}
 
-        <PopoverContent side="top" align="start" className="w-14 p-2 space-y-2">
-          {/* TOOLS ICON (hover opens existing tools popover) */}
-          <HoverCard>
-            <HoverCardTrigger asChild>
-              <Button variant="ghost" size="icon" title="Active/Inactive - Tools">
-                <motion.div
-                  whileHover={{ scale: 1.25 }}
-                  transition={{
-                    scale: { type: "spring", stiffness: 300, damping: 10 },
-                    rotate: { duration: 0.2 },
-                  }}
-                >
-                  <Wrench className="h-5 w-5" />
-                </motion.div>
-              </Button>
-            </HoverCardTrigger>
-            <HoverCardContent side="right" className="w-72 p-2">
-              <div className="text-sm font-medium mb-2">Tools</div>
-              {/* ----------  empty or list  ---------- */}
-              {tools.length === 0 ? (
-                <div className="rounded-lg border border-dashed p-4 text-center">
-                  <Sparkles className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
-                  <p className="text-xs text-muted-foreground">No tools available</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    Admin will enable them soon
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-1 mb-2 max-h-[60vh] overflow-auto">
-                  {tools.map((t) => {
-                    const Icon = t.icon;
-                    return (
-                      <div key={t.id}>
-                        <div className="flex items-center gap-2 rounded px-2 py-1.5 text-sm">
-                          <Icon className="h-4 w-4 shrink-0" />
-                          <div className="flex-1">
-                            <div className="font-medium">{t.label}</div>
-                            <div className="text-xs text-muted-foreground line-clamp-2">
-                              {t.description}
-                            </div>
-                            {/* badges row */}
-                            <div className="mt-1 flex items-center gap-2">
-                              {/* global status (read-only) */}
-                              {/* <motion.div
-                                whileHover={{ scale: 1.25 }}
-                                transition={{
-                                  scale: { type: "spring", stiffness: 300, damping: 10 }
-                                }}
-                              >   */}
-                                <Badge
-                                  variant={t.globalStatus === "active" ? "default" : "secondary"}
-                                  className="text-[10px] px-2 py-0"
-                                >
-                                  {t.globalStatus}
-                                </Badge>
-                              {/* </motion.div> */}
-          
-                              {/* user status (clickable) */}
-                              <motion.div
-                                whileHover={{ scale: 1.25 }}
-                                transition={{
-                                  scale: { type: "spring", stiffness: 300, damping: 10 }
-                                }}
-                              >  
-                                <Badge
-                                  variant={t.userStatus === "allowed" ? "default" : "destructive"}
-                                  className="cursor-pointer text-[10px] px-2 py-0"
-                                  onClick={() => toggleUserStatus(t.name)}
-                                >
-                                  {t.userStatus}
-                                </Badge>
-                              </motion.div>
+      {/* ==========  TEXTAREA WITH ICONS INSIDE  ========== */}
+      <div className="relative flex items-center">
+        
+        {/* ==========  TOOLS POPOVER  ========== */}
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Agents"
+              className="absolute left-3 top-1/2 -translate-y-1/2 z-10"
+            >
+              <motion.div
+                whileHover={{ scale: 1.25 }}
+                animate={{ rotate: popoverOpen ? 45 : 0 }}
+                transition={{
+                  scale: { type: "spring", stiffness: 300, damping: 10 }, // hover spring
+                  rotate: { duration: 0.2 },                             // plus→X speed
+                }}
+              >
+                <Plus className="h-5 w-5" />
+              </motion.div>
+            </Button>
+          </PopoverTrigger>
+
+          <PopoverContent side="top" align="start" className="w-14 p-2 space-y-2">
+            {/* TOOLS ICON (hover opens existing tools popover) */}
+            <HoverCard>
+              <HoverCardTrigger asChild>
+                <Button variant="ghost" size="icon" title="Active/Inactive - Tools">
+                  <motion.div
+                    whileHover={{ scale: 1.25 }}
+                    transition={{
+                      scale: { type: "spring", stiffness: 300, damping: 10 },
+                      rotate: { duration: 0.2 },
+                    }}
+                  >
+                    <Wrench className="h-5 w-5" />
+                  </motion.div>
+                </Button>
+              </HoverCardTrigger>
+              <HoverCardContent side="right" className="w-72 p-2">
+                <div className="text-sm font-medium mb-2">Tools</div>
+                {/* ----------  empty or list  ---------- */}
+                {tools.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-4 text-center">
+                    <Sparkles className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
+                    <p className="text-xs text-muted-foreground">No tools available</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Admin will enable them soon
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-1 mb-2 max-h-[60vh] overflow-auto">
+                    {tools.map((t) => {
+                      const Icon = t.icon;
+                      return (
+                        <div key={t.id}>
+                          <div className="flex items-center gap-2 rounded px-2 py-1.5 text-sm">
+                            <Icon className="h-4 w-4 shrink-0" />
+                            <div className="flex-1">
+                              <div className="font-medium">{t.label}</div>
+                              <div className="text-xs text-muted-foreground line-clamp-2">
+                                {t.description}
+                              </div>
+                              {/* badges row */}
+                              <div className="mt-1 flex items-center gap-2">
+                                {/* global status (read-only) */}
+                                {/* <motion.div
+                                  whileHover={{ scale: 1.25 }}
+                                  transition={{
+                                    scale: { type: "spring", stiffness: 300, damping: 10 }
+                                  }}
+                                >   */}
+                                  <Badge
+                                    variant={t.globalStatus === "active" ? "default" : "secondary"}
+                                    className="text-[10px] px-2 py-0"
+                                  >
+                                    {t.globalStatus}
+                                  </Badge>
+                                {/* </motion.div> */}
+            
+                                {/* user status (clickable) */}
+                                <motion.div
+                                  whileHover={{ scale: 1.25 }}
+                                  transition={{
+                                    scale: { type: "spring", stiffness: 300, damping: 10 }
+                                  }}
+                                >  
+                                  <Badge
+                                    variant={t.userStatus === "allowed" ? "default" : "destructive"}
+                                    className="cursor-pointer text-[10px] px-2 py-0"
+                                    onClick={() => toggleUserStatus(t.name)}
+                                  >
+                                    {t.userStatus}
+                                  </Badge>
+                                </motion.div>
+                              </div>
                             </div>
                           </div>
+                          <Separator />
                         </div>
-                        <Separator />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </HoverCardContent>
-          </HoverCard>
+                      );
+                    })}
+                  </div>
+                )}
+              </HoverCardContent>
+            </HoverCard>
 
-          {/* ACCOUNTS ICON */}
-          <HoverCard>
-            <HoverCardTrigger asChild>
-              <Button variant="ghost" size="icon" title="Accounts">
+            {/* ACCOUNTS ICON */}
+            <HoverCard>
+              <HoverCardTrigger asChild>
+                <Button variant="ghost" size="icon" title="Accounts">
+                  <motion.div
+                    whileHover={{ scale: 1.25 }}
+                    transition={{
+                      scale: { type: "spring", stiffness: 300, damping: 10 },
+                      rotate: { duration: 0.2 },
+                    }}
+                  >
+                    <UserCircle className="h-5 w-5" />
+                  </motion.div>
+                </Button>
+              </HoverCardTrigger>
+              <HoverCardContent side="right" className="w-56 p-2">
+                <div className="text-sm font-medium mb-2">Accounts</div>
+                {["Facebook", "Gmail", "GitHub", "Twitter"].map((item) => (
+                  <div
+                    key={item}
+                    className="rounded px-2 py-1 text-sm hover:bg-muted cursor-pointer"
+                  >
+                    {item}
+                  </div>
+                ))}
+              </HoverCardContent>
+            </HoverCard>
+
+            {/* IMAGE UPLOAD */}
+            <label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                hidden
+                accept="image/*"
+                onChange={onImagePicked}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                title="Upload Image"
+                onClick={() => fileInputRef.current?.click()}
+              >
                 <motion.div
                   whileHover={{ scale: 1.25 }}
                   transition={{
@@ -582,37 +666,17 @@ export default function PromptInput({
                     rotate: { duration: 0.2 },
                   }}
                 >
-                  <UserCircle className="h-5 w-5" />
+                  <Image className="h-5 w-5" />
                 </motion.div>
               </Button>
-            </HoverCardTrigger>
-            <HoverCardContent side="right" className="w-56 p-2">
-              <div className="text-sm font-medium mb-2">Accounts</div>
-              {["Facebook", "Gmail", "GitHub", "Twitter"].map((item) => (
-                <div
-                  key={item}
-                  className="rounded px-2 py-1 text-sm hover:bg-muted cursor-pointer"
-                >
-                  {item}
-                </div>
-              ))}
-            </HoverCardContent>
-          </HoverCard>
+            </label>
 
-          {/* IMAGE UPLOAD */}
-          <label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              hidden
-              accept="image/*"
-              onChange={onImagePicked}
-            />
+            {/* MCP REMOTE SERVERS */}
             <Button
               variant="ghost"
               size="icon"
-              title="Upload Image"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => setMcpOpen(true)}
+              title="Add MCP Sever"
             >
               <motion.div
                 whileHover={{ scale: 1.25 }}
@@ -621,34 +685,13 @@ export default function PromptInput({
                   rotate: { duration: 0.2 },
                 }}
               >
-                <Image className="h-5 w-5" />
+                <Server className="h-5 w-5" />
               </motion.div>
             </Button>
-          </label>
 
-          {/* MCP REMOTE SERVERS */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setMcpOpen(true)}
-            title="Add MCP Sever"
-          >
-            <motion.div
-              whileHover={{ scale: 1.25 }}
-              transition={{
-                scale: { type: "spring", stiffness: 300, damping: 10 },
-                rotate: { duration: 0.2 },
-              }}
-            >
-              <Server className="h-5 w-5" />
-            </motion.div>
-          </Button>
+          </PopoverContent>
+        </Popover>
 
-        </PopoverContent>
-      </Popover>
-
-      {/* ==========  TEXTAREA WITH ICONS INSIDE  ========== */}
-      <div className="relative flex items-center">
         <Textarea
           ref={textareaRef}
           value={value}
@@ -676,8 +719,6 @@ export default function PromptInput({
             leading-6
             overflow-y-auto      /* scroll after 10 lines */
             placeholder:text-transparent
-            min-h-[3rem]         /* single-line height (48 px) */
-            max-h-[15rem]        /* 10 lines x 24 px = 240 px */
           "
         />
         {showPlaceholder && (
@@ -809,6 +850,10 @@ export default function PromptInput({
       {/* ==========  STT and Image loading modal  ========== */}
       {sttLoading && <LoadingModal message="Recognising your voice…" />}
       {imageLoading && <LoadingModal message="Reading image…" />}
+
+      <p className="mt-3 text-center text-xs text-muted-foreground">
+        MeghX can generate inaccurate responses. Always verify critical information.
+      </p>
     </div>
   );
 }

@@ -42,6 +42,7 @@ export default function ChatPage() {
       setMessages(threadData.messages.map((m) => ({
         role: m.role,
         text: m.content,
+        image_url: m.image_url ?? null,
         id: m.id
       })));
     } else {
@@ -84,7 +85,7 @@ export default function ChatPage() {
 
 
   /** Add user message immediately */
-  const addUserMessage = (text) => {
+  const addUserMessage = (text, imageUrl = null) => {
     const id = `local-${uuidv4()}`;
 
     setMessages(prev => [
@@ -93,6 +94,7 @@ export default function ChatPage() {
         id,
         role: "user",
         text,
+        image_url: imageUrl,
         status: "sending",
       },
     ]);
@@ -178,6 +180,7 @@ export default function ChatPage() {
                     role={m.role} 
                     text={m.text} 
                     raw={m.raw ?? m.text}
+                    image_url={m.image_url ?? null}
                     isStreaming={m.id === streamingMessageId} 
                   />
                 ))}

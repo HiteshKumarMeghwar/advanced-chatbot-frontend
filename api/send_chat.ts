@@ -4,6 +4,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL as string;
 interface ChatSSEOptions {
   threadId: string;
   query: string;
+  image_url?: string | null;
   onToken: (token: string) => void;
   onInterrupt?: (data: any) => void;
   onError?: (error: string) => void;
@@ -13,6 +14,7 @@ interface ChatSSEOptions {
 export function sendChatSSE({
   threadId,
   query,
+  image_url,
   onToken,
   onInterrupt,
   onError,
@@ -32,6 +34,7 @@ export function sendChatSSE({
     body: JSON.stringify({
       thread_id: threadId,
       query: query.trim(),
+      image_url: image_url ?? null,
     }),
   })
     .then(async (response) => {
