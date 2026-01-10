@@ -22,7 +22,9 @@ import {
   Server,
   UserCircle,
   Wrench,
+  Plug,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -45,6 +47,7 @@ import { parseImage, uploadImage } from "@/api/image";
 import LoadingModal from "@/components/chat/prompt-loading-modal";
 import { fetchMcpServers, createMcpServer, deleteMcpServer, refreshTools } from "@/api/mcp_server";
 import { toast } from "sonner";
+import { forwardRef, useImperativeHandle } from "react";
 
 /* map backend name -> nice icon */
 const iconMap = {
@@ -63,14 +66,14 @@ const iconMap = {
 
 
 
-export default function PromptInput({ 
-  addUserMessage, 
-  appendAssistantMessage, 
-  threadId, 
-  waitingForBackend,
-  // onInterrupt,
-  // interrupt
-}) {
+const PromptInput = forwardRef(function PromptInputFn(
+  { addUserMessage, appendAssistantMessage, threadId, waitingForBackend },
+  ref
+) {
+  /* ----------  expose onSend to parent  ---------- */
+  useImperativeHandle(ref, () => ({
+    send: (text, messageId) => onSend(text, messageId),
+  }));
 
   /* ----------  state  ---------- */
   const [value, setValue] = useState("");
@@ -152,15 +155,17 @@ export default function PromptInput({
     /* 2. sync backend */
     try {
       await updateToolStatus(newUserStatus, tool.id);
+      toast.success("Updated tool status");
     } catch {
       /* 3. rollback on error */
+      toast.error("Failed - update tool status");
       setTools(snapshot);
     }
   };
 
 
   /* ----------  send message  ---------- */ // ..............................................................
-  const onSend = async (overrideText) => {
+  const onSend = async (overrideText, edit_message_id) => {
     const prompt = (typeof overrideText === 'string' ? overrideText : value).trim();
     const finalPrompt = ocrText ? `${prompt}\n\n[OCR text from image below]:\n\n ${ocrText}]` : prompt;
     let uploadedImageUrl = null;
@@ -177,16 +182,19 @@ export default function PromptInput({
       uploadedImageUrl = res.url;
     }
 
-    addUserMessage(finalPrompt, uploadedImageUrl);
-
     if (imageUrl) {
       URL.revokeObjectURL(imageUrl);
       setImageUrl("");
       setImageFile(null);
     }
 
-    // stream assistant reply (unchanged)
-    const assistant = appendAssistantMessage();
+    if (edit_message_id){
+      addUserMessage(finalPrompt, uploadedImageUrl, edit_message_id);
+    }else{
+      addUserMessage(finalPrompt, uploadedImageUrl);
+    }
+    
+    const assistant = appendAssistantMessage(edit_message_id+1);
 
     let textBuffer = "";
 
@@ -194,16 +202,21 @@ export default function PromptInput({
     if (abortControllerRef.current) {
       abortControllerRef.current();
     }
-
+  
     try {
       const cleanup = sendChatSSE({
         threadId,
         query: finalPrompt,
         image_url: uploadedImageUrl,
+        edit_message_id: edit_message_id,
 
         onToken: (token) => {
           textBuffer += token;
           assistant.updateText(textBuffer);
+        },
+
+        onMessageCreated: (messageId) => {  // NEW: Update ID immediately
+          assistant.updateId(messageId);
         },
 
         onInterrupt: (interruptData) => {
@@ -240,8 +253,7 @@ export default function PromptInput({
     const loadServers = async () => {
       try {
         const servers = await fetchMcpServers();
-        const list = Object.entries(servers).map(([name, config]) => ({ name, ...config }));
-        setMcpServers(list);
+        setMcpServers(servers);
       } catch (err) {
         toast.error("Failed to load MCP servers");
       }
@@ -253,16 +265,15 @@ export default function PromptInput({
   const onSaveReload = async (payload) => {
     try {
       setSavingMcp(true);
-      await createMcpServer(payload);
-      await refreshTools();
-      await loadTools();
-      toast.success(`Server "${payload.name}" added`);
-
-      // reload server list
+      const res = await createMcpServer(payload);
       const servers = await fetchMcpServers();
-      const list = Object.entries(servers).map(([name, config]) => ({ name, ...config }));
-      setMcpServers(list);
+      setMcpServers(servers);
+      await loadTools();
 
+      toast.success(
+        `MCP "${res.mcp}" created · ${res.tools_count} tools installed`,
+        { duration: 5000 }
+      );
       // setMcpOpen(false);
     } catch (err) {
       toast.error(err.message || "Failed to save MCP server");
@@ -272,45 +283,19 @@ export default function PromptInput({
   };
 
   // ---------- Delete ----------..........................................
-  const handleDelete = async (name) => {
+  const handleDelete = async (mcpId) => {
     try {
       setDeletingMcp(true);
-      const res = await deleteMcpServer(name);
-      
-      // Create toast content
-      const {
-        message,
-        deleted_tools_count = 0,
-        deleted_tools = [],
-      } = res;
-
-      const toastContent = (
-        <div>
-          <strong>{message}</strong>
-
-          <div style={{ marginTop: "4px", fontSize: "13px", opacity: 0.9 }}>
-            {deleted_tools_count > 0
-              ? `${deleted_tools_count} tool${deleted_tools_count > 1 ? "s" : ""} revoked for this user`
-              : "No user tools were linked to this server"}
-          </div>
-
-          {deleted_tools_count > 0 && (
-            <ul style={{ marginTop: "6px", paddingLeft: "18px" }}>
-              {deleted_tools.map((tool) => (
-                <li key={tool}>{tool}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      );
-
-      await loadTools();
-      toast.success(toastContent, { duration: 5000 });
-
-      // reload server list
+      const res = await deleteMcpServer(mcpId);
+      // reload server list and user tools
       const servers = await fetchMcpServers();
-      const list = Object.entries(servers).map(([name, config]) => ({ name, ...config }));
-      setMcpServers(list);
+      setMcpServers(servers);
+      await loadTools();
+
+      toast.success(
+        `MCP "${res.mcp}" deleted.`,
+        { duration: 5000 }
+      );
     } catch (err) {
       toast.error(err.message || "Failed to delete MCP server");
     } finally {
@@ -471,8 +456,7 @@ export default function PromptInput({
 
   /* ----------  UI  ---------- */
   return (
-    <div className="relative mx-auto w-full max-w-4xl px-2 sm:px-1">
-    
+    <>
       {/* MCP Modal */}
       <MCPModal
         open={mcpOpen}
@@ -508,190 +492,8 @@ export default function PromptInput({
       )}
 
       {/* ==========  TEXTAREA WITH ICONS INSIDE  ========== */}
-      <div className="relative flex items-center">
-        
-        {/* ==========  TOOLS POPOVER  ========== */}
-        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              title="Agents"
-              className="absolute left-3 top-1/2 -translate-y-1/2 z-10"
-            >
-              <motion.div
-                whileHover={{ scale: 1.25 }}
-                animate={{ rotate: popoverOpen ? 45 : 0 }}
-                transition={{
-                  scale: { type: "spring", stiffness: 300, damping: 10 }, // hover spring
-                  rotate: { duration: 0.2 },                             // plus→X speed
-                }}
-              >
-                <Plus className="h-5 w-5" />
-              </motion.div>
-            </Button>
-          </PopoverTrigger>
-
-          <PopoverContent side="top" align="start" className="w-14 p-2 space-y-2">
-            {/* TOOLS ICON (hover opens existing tools popover) */}
-            <HoverCard>
-              <HoverCardTrigger asChild>
-                <Button variant="ghost" size="icon" title="Active/Inactive - Tools">
-                  <motion.div
-                    whileHover={{ scale: 1.25 }}
-                    transition={{
-                      scale: { type: "spring", stiffness: 300, damping: 10 },
-                      rotate: { duration: 0.2 },
-                    }}
-                  >
-                    <Wrench className="h-5 w-5" />
-                  </motion.div>
-                </Button>
-              </HoverCardTrigger>
-              <HoverCardContent side="right" className="w-72 p-2">
-                <div className="text-sm font-medium mb-2">Tools</div>
-                {/* ----------  empty or list  ---------- */}
-                {tools.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-4 text-center">
-                    <Sparkles className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
-                    <p className="text-xs text-muted-foreground">No tools available</p>
-                    <p className="text-[10px] text-muted-foreground mt-1">
-                      Admin will enable them soon
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-1 mb-2 max-h-[60vh] overflow-auto">
-                    {tools.map((t) => {
-                      const Icon = t.icon;
-                      return (
-                        <div key={t.id}>
-                          <div className="flex items-center gap-2 rounded px-2 py-1.5 text-sm">
-                            <Icon className="h-4 w-4 shrink-0" />
-                            <div className="flex-1">
-                              <div className="font-medium">{t.label}</div>
-                              <div className="text-xs text-muted-foreground line-clamp-2">
-                                {t.description}
-                              </div>
-                              {/* badges row */}
-                              <div className="mt-1 flex items-center gap-2">
-                                {/* global status (read-only) */}
-                                {/* <motion.div
-                                  whileHover={{ scale: 1.25 }}
-                                  transition={{
-                                    scale: { type: "spring", stiffness: 300, damping: 10 }
-                                  }}
-                                >   */}
-                                  <Badge
-                                    variant={t.globalStatus === "active" ? "default" : "secondary"}
-                                    className="text-[10px] px-2 py-0"
-                                  >
-                                    {t.globalStatus}
-                                  </Badge>
-                                {/* </motion.div> */}
-            
-                                {/* user status (clickable) */}
-                                <motion.div
-                                  whileHover={{ scale: 1.25 }}
-                                  transition={{
-                                    scale: { type: "spring", stiffness: 300, damping: 10 }
-                                  }}
-                                >  
-                                  <Badge
-                                    variant={t.userStatus === "allowed" ? "default" : "destructive"}
-                                    className="cursor-pointer text-[10px] px-2 py-0"
-                                    onClick={() => toggleUserStatus(t.name)}
-                                  >
-                                    {t.userStatus}
-                                  </Badge>
-                                </motion.div>
-                              </div>
-                            </div>
-                          </div>
-                          <Separator />
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </HoverCardContent>
-            </HoverCard>
-
-            {/* ACCOUNTS ICON */}
-            <HoverCard>
-              <HoverCardTrigger asChild>
-                <Button variant="ghost" size="icon" title="Accounts">
-                  <motion.div
-                    whileHover={{ scale: 1.25 }}
-                    transition={{
-                      scale: { type: "spring", stiffness: 300, damping: 10 },
-                      rotate: { duration: 0.2 },
-                    }}
-                  >
-                    <UserCircle className="h-5 w-5" />
-                  </motion.div>
-                </Button>
-              </HoverCardTrigger>
-              <HoverCardContent side="right" className="w-56 p-2">
-                <div className="text-sm font-medium mb-2">Accounts</div>
-                {["Facebook", "Gmail", "GitHub", "Twitter"].map((item) => (
-                  <div
-                    key={item}
-                    className="rounded px-2 py-1 text-sm hover:bg-muted cursor-pointer"
-                  >
-                    {item}
-                  </div>
-                ))}
-              </HoverCardContent>
-            </HoverCard>
-
-            {/* IMAGE UPLOAD */}
-            <label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                hidden
-                accept="image/*"
-                onChange={onImagePicked}
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                title="Upload Image"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <motion.div
-                  whileHover={{ scale: 1.25 }}
-                  transition={{
-                    scale: { type: "spring", stiffness: 300, damping: 10 },
-                    rotate: { duration: 0.2 },
-                  }}
-                >
-                  <Image className="h-5 w-5" />
-                </motion.div>
-              </Button>
-            </label>
-
-            {/* MCP REMOTE SERVERS */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setMcpOpen(true)}
-              title="Add MCP Sever"
-            >
-              <motion.div
-                whileHover={{ scale: 1.25 }}
-                transition={{
-                  scale: { type: "spring", stiffness: 300, damping: 10 },
-                  rotate: { duration: 0.2 },
-                }}
-              >
-                <Server className="h-5 w-5" />
-              </motion.div>
-            </Button>
-
-          </PopoverContent>
-        </Popover>
-
+      <div className="relative frost-panel">
+        {/* textarea grows freely */}
         <Textarea
           ref={textareaRef}
           value={value}
@@ -700,160 +502,291 @@ export default function PromptInput({
           onChange={(e) => {
             setValue(e.target.value);
             setShowPlaceholder(e.target.value.length === 0);
-            /* -------- auto-height -------- */
-            const lines = e.target.value.split("\n").length;
-            e.target.rows = Math.min(Math.max(lines, 1), 20);
+            // e.target.rows = Math.min(e.target.value.split("\n").length, 20);
           }}
           onKeyDown={(e) => {
-            if (waitingForBackend) return;  
+            if (waitingForBackend) return;
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               onSend();
             }
           }}
-          className="
-            resize-none
-            rounded-2xl
-            px-11
-            text-sm
-            leading-6
-            overflow-y-auto      /* scroll after 10 lines */
-            placeholder:text-transparent
-          "
+          className="invisible-scroll rounded-2xl border-0 px-4 pt-3 pb-8 text-sm leading-6 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
         />
+
+        {/* placeholder SVG – absolute top-left */}
         {showPlaceholder && (
-        <svg
-          className="pointer-events-none absolute left-11 top-1/2 -translate-y-1/2 h-6 text-purple-500"
-          viewBox="0 0 180 24"
-          fill="none"
-        >
-          <text
-            x="10"
-            y="18"
-            fontSize="15"
-            fontFamily="Kalam, cursive"
-            fill="url(#grad)"
+          <svg
+            className="pointer-events-none absolute left-4 top-3 h-6 text-purple-500"
+            viewBox="0 0 180 24"
+            fill="none"
           >
-            Say MeghX…
-          </text>
-          <defs>
-            <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#ec4899" />
-              <stop offset="100%" stopColor="#8b5cf6" />
-            </linearGradient>
-          </defs>
-        </svg>
+            <text x="10" y="21" fontSize="15" fontFamily="Kalam, cursive" fill="url(#grad)">
+              Say MeghX…
+            </text>
+            <defs>
+              <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#ec4899" />
+                <stop offset="100%" stopColor="#8b5cf6" />
+              </linearGradient>
+            </defs>
+          </svg>
         )}
 
-        {/* voice button inside right edge */}
-        <Button
-          size="icon"
-          variant="ghost"
-          title="Voice input"
-          className="absolute right-12 top-1/2 -translate-y-1/2"
-          onClick={() => {
-            if (waitingForBackend) return;
-            recording ? stopRecording() : startRecording();
-          }}
-          disabled={value.trim() || waitingForBackend}
-        >
-          <div className="relative h-5 w-5 flex items-center justify-center">
-            {waitingForBackend ? (
-              /* -------  modern loader  ------- */
-              <div className="flex h-5 w-5 items-center justify-center">
-                <span className="sr-only">Loading</span>
-                <div
-                  className="h-4 w-4 rounded-full border-2 border-transparent"
-                  style={{
-                    background: `conic-gradient(from 0deg, #ec4899 0%, #8b5cf6 100%)`,
-                    mask: `radial-gradient(circle 6px at center, transparent 78%, black 80%)`,
-                    WebkitMask: `radial-gradient(circle 6px at center, transparent 78%, black 80%)`,
-                    animation: `spin 1s linear infinite`,
-                  }}
-                />
-                <style jsx>{`
-                  @keyframes spin {
-                    to { transform: rotate(360deg); }
-                  }
-                `}</style>
-              </div>
-            ) : recording ? (
-              /* 3-bar sound-wave animation */
-              <>
-                <span className="sr-only">Recording…</span>
-                <div className="flex items-center justify-center gap-0.5 h-4">
-                  {[0, 1, 2].map((i) => (
-                    <span
-                      key={i}
-                      className="w-0.5 rounded-full bg-red-500"
-                      style={{
-                        height: '100%',
-                        animation: `wave 1.2s ease-in-out infinite`,
-                        animationDelay: `${i * 0.15}s`,
-                      }}
-                    />
-                  ))}
-                </div>
-                <style jsx>{`
-                  @keyframes wave {
-                    0%, 100% { transform: scaleY(0.3); }
-                    50% { transform: scaleY(1); }
-                  }
-                `}</style>
-              </>
-            ) : (
-              <Mic className="h-5 w-5" />
-            )}
-          </div>
-        </Button>
+        {/* ==========  ICON BAR – always below textarea  ========== */}
+        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 pb-2 pt-1">
+          {/* LEFT – tools + image + mcp */}
+          <div className="flex items-center gap-1">
+            {/* Tools popover – same as before */}
+            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon-sm" data-tooltip="Agents">
+                  <motion.div
+                    whileHover={{ scale: 1.25 }}
+                    animate={{ rotate: popoverOpen ? 45 : 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 10 }}
+                  >
+                    <Plus className="h-5 w-5" />
+                  </motion.div>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent side="top" align="start" className="w-14 p-2 space-y-2">
+                {/* --- wrench / accounts / image / mcp --- */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon-sm" data-tooltip="Active/Inactive - Tools">
+                      <motion.div
+                        whileHover={{ scale: 1.25 }}
+                        transition={{
+                          scale: { type: "spring", stiffness: 300, damping: 10 },
+                          rotate: { duration: 0.2 },
+                        }}
+                      >
+                        <Wrench className="h-5 w-5" />
+                      </motion.div>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent side="right" className="w-72 p-2">
+                    {/* tools list – identical to your code */}
+                    <div className="text-sm font-medium mb-2">Tools</div>
+                    {tools.length === 0 ? (
+                      <div className="rounded-lg border border-dashed p-4 text-center">
+                        <Sparkles className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
+                        <p className="text-xs text-muted-foreground">No tools available</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1 max-h-[60vh] overflow-auto">
+                        {tools.map((t) => {
+                          const Icon = t.icon;
+                          return (
+                            <div key={t.id}>
+                              <div className="flex items-center gap-2 rounded px-2 py-1.5 text-sm">
+                                <Icon className="h-4 w-4 shrink-0" />
+                                <div className="flex-1">
+                                  <div className="font-medium">{t.label}</div>
+                                  <div className="text-xs text-muted-foreground line-clamp-2">{t.description}</div>
+                                  <div className="mt-1 flex items-center gap-2">
+                                    <Badge variant={t.globalStatus === "active" ? "default" : "secondary"} className="text-[10px] px-2 py-0">{t.globalStatus}</Badge>
+                                    <motion.div
+                                      whileHover={{ scale: 1.25 }}
+                                      transition={{
+                                        scale: { type: "spring", stiffness: 300, damping: 10 },
+                                        rotate: { duration: 0.2 },
+                                      }}
+                                    >  
+                                      <Switch
+                                        checked={t.userStatus === "allowed"}
+                                        onCheckedChange={(checked) => toggleUserStatus(t.name)} // still sends allowed/denied
+                                        className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-rose-500"
+                                      />
+                                    </motion.div>
+                                  </div>
+                                </div>
+                              </div>
+                              <Separator />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
 
-        {/* send button inside right edge */}
-        <Button
-          size="icon"
-          onClick={waitingForBackend ? undefined : onSend}
-          disabled={!value.trim() || waitingForBackend}   // ← disable + hide when busy
-          className="absolute right-2 top-1/2 -translate-y-1/2"
-        >
-          <motion.div
-            whileHover={{ scale: 1.25 }}
-            transition={{
-              scale: { type: "spring", stiffness: 300, damping: 10 },
-              rotate: { duration: 0.2 },
-            }}
-          >
-            {waitingForBackend ? (
-              /* -------  modern loader  ------- */
-              <div className="flex h-5 w-5 items-center justify-center">
-                <span className="sr-only">Loading</span>
-                <div
-                  className="h-4 w-4 rounded-full border-2 border-transparent"
-                  style={{
-                    background: `conic-gradient(from 0deg, #ec4899 0%, #8b5cf6 100%)`,
-                    mask: `radial-gradient(circle 6px at center, transparent 78%, black 80%)`,
-                    WebkitMask: `radial-gradient(circle 6px at center, transparent 78%, black 80%)`,
-                    animation: `spin 1s linear infinite`,
-                  }}
-                />
-                <style jsx>{`
-                  @keyframes spin {
-                    to { transform: rotate(360deg); }
-                  }
-                `}</style>
-              </div>
-            ) : (
-              <Send className="h-5 w-5" />
-            )}
-          </motion.div>
-        </Button>
+                {/* Accounts */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon-sm" data-tooltip="Accounts">
+                      <motion.div
+                        whileHover={{ scale: 1.25 }}
+                        transition={{
+                          scale: { type: "spring", stiffness: 300, damping: 10 },
+                          rotate: { duration: 0.2 },
+                        }}
+                      >
+                        <UserCircle className="h-5 w-5" />
+                      </motion.div>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent side="right" className="w-56 p-2">
+                    <div className="text-sm font-medium mb-2">Accounts</div>
+                    <div className="space-y-1 max-h-[60vh] overflow-auto">
+                      {[
+                        { name: "Facebook",  integrated: true,  active: true  },
+                        { name: "Gmail",     integrated: true,  active: false },
+                        { name: "GitHub",    integrated: false, active: false },
+                        { name: "Twitter",   integrated: true,  active: true  },
+                      ].map((acc) => (
+                        <div
+                          key={acc.name}
+                          className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted transition-colors"
+                        >
+                          {/* left icon + label */}
+                          <UserCircle className="h-4 w-4 shrink-0" />
+                          <span className="font-medium flex-1">{acc.name}</span>
+
+                          {/* right-end icons */}
+                          <div className="flex items-center gap-2">
+                            {/* integration status */}
+                            <motion.div whileHover={{ scale: 1.2 }} transition={{ type: "spring", stiffness: 300, damping: 10 }}>
+                              <Plug
+                                className={`h-4 w-4 ${
+                                  acc.integrated ? "text-green-500" : "text-gray-400"
+                                }`}
+                                title={acc.integrated ? "Integrated" : "Not integrated"}
+                              />
+                            </motion.div>
+
+                            {/* activate / deactivate toggle */}
+                            <motion.div whileHover={{ scale: 1.2 }} transition={{ type: "spring", stiffness: 300, damping: 10 }}>
+                              <Switch
+                                checked={acc.active}
+                                onCheckedChange={(checked) => {
+                                  /* your toggle logic here */
+                                  console.log(`${acc.name} -> ${checked ? "active" : "inactive"}`);
+                                }}
+                              />
+                            </motion.div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* Image upload */}
+                <label>
+                  <input ref={fileInputRef} type="file" hidden accept="image/*" onChange={onImagePicked} />
+                  <Button variant="ghost" size="icon-sm" data-tooltip="Upload Image" onClick={() => fileInputRef.current?.click()}>
+                    <motion.div
+                      whileHover={{ scale: 1.25 }}
+                      transition={{
+                        scale: { type: "spring", stiffness: 300, damping: 10 },
+                        rotate: { duration: 0.2 },
+                      }}
+                    >
+                      <Image className="h-5 w-5" />
+                    </motion.div>
+                  </Button>
+                </label>
+
+                {/* MCP servers */}
+                <Button variant="ghost" size="icon-sm" onClick={() => setMcpOpen(true)} data-tooltip="Add MCP Server">
+                  <motion.div
+                    whileHover={{ scale: 1.25 }}
+                    transition={{
+                      scale: { type: "spring", stiffness: 300, damping: 10 },
+                      rotate: { duration: 0.2 },
+                    }}
+                  >
+                    <Server className="h-5 w-5" />
+                  </motion.div>
+                </Button>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* RIGHT – voice / send */}
+          <div className="flex items-center gap-1">
+            {/* voice */}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              data-tooltip="Voice input"
+              onClick={() => (recording ? stopRecording() : startRecording())}
+              disabled={value.trim() || waitingForBackend}
+            >
+              {waitingForBackend ? (
+                <div className="h-4 w-4 rounded-full border-2 border-transparent"
+                    style={{ background: `conic-gradient(from 0deg, #ec4899 0%, #8b5cf6 100%)`, mask: `radial-gradient(circle 6px at center, transparent 78%, black 80%)`, animation: `spin 1s linear infinite` }} />
+              ) : recording ? (
+                <div className="flex gap-0.5 h-4">
+                  <div className="flex items-center justify-center gap-0.5 h-4">
+                    {[0, 1, 2].map((i) => (
+                      <span
+                        key={i}
+                        className="w-0.5 rounded-full bg-red-500"
+                        style={{
+                          height: '100%',
+                          animation: `wave 1.2s ease-in-out infinite`,
+                          animationDelay: `${i * 0.15}s`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <style jsx>{`
+                    @keyframes wave {
+                      0%, 100% { transform: scaleY(0.3); }
+                      50% { transform: scaleY(1); }
+                    }
+                  `}</style>
+                </div>
+              ) : <motion.div
+                    whileHover={{ scale: 1.25 }}
+                    transition={{
+                      scale: { type: "spring", stiffness: 300, damping: 10 },
+                      rotate: { duration: 0.2 },
+                    }}
+                  >
+                    <Mic className="h-5 w-5" />
+                  </motion.div>
+              }
+            </Button>
+
+            {/* send */}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              data-tooltip="Send chat"
+              onClick={waitingForBackend ? undefined : onSend}
+              disabled={!value.trim() || waitingForBackend}
+            >
+              {waitingForBackend ? (
+                <div className="h-4 w-4 rounded-full border-2 border-transparent"
+                    style={{ background: `conic-gradient(from 0deg, #ec4899 0%, #8b5cf6 100%)`, mask: `radial-gradient(circle 6px at center, transparent 78%, black 80%)`, animation: `spin 1s linear infinite` }} />
+              ) : <motion.div
+                    whileHover={{ scale: 1.25 }}
+                    transition={{
+                      scale: { type: "spring", stiffness: 300, damping: 10 },
+                      rotate: { duration: 0.2 },
+                    }}
+                  >
+                    <Send className="h-5 w-5" />
+                  </motion.div>
+              }
+            </Button>
+          </div>
+        </div>
       </div>
 
-      {/* ==========  STT and Image loading modal  ========== */}
+      {/* modals */}
       {sttLoading && <LoadingModal message="Recognising your voice…" />}
       {imageLoading && <LoadingModal message="Reading image…" />}
 
-      <p className="mt-3 text-center text-xs text-muted-foreground">
+      <p className="mt-1 text-center text-xs text-muted-foreground">
         MeghX can generate inaccurate responses. Always verify critical information.
       </p>
-    </div>
+    </>
   );
-}
+});
+PromptInput.displayName = "PromptInput";
+export default PromptInput;

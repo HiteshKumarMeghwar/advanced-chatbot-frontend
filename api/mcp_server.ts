@@ -37,25 +37,31 @@ export async function createMcpServer(data: {
   return res.json();
 }
 
-export async function deleteMcpServer(name: string) {
+export async function deleteMcpServer(mcpId: number) {
   const res = await fetch(
-    `${API_URL}/mcp_server/delete_for_user?mcp_name=${encodeURIComponent(name)}`,
+    `${API_URL}/mcp_server/delete_for_user?mcp_id=${mcpId}`,
     {
       method: "DELETE",
       credentials: "include",
     }
   );
 
-  if (!res.ok) throw new Error("Failed to delete server");
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail ?? "Failed to delete MCP server");
+  }
   return res.json();
 }
 
-export async function refreshTools() {
-  const res = await fetch(`${API_URL}/mcp_server/insert_tool_user`, {
-    method: "POST",
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error("Failed to inserting tools");
+export async function searchMcp(query: string) {
+  const res = await fetch(
+    `${API_URL}/mcp_server/search?mcp_query=${encodeURIComponent(query)}`,
+    {
+      method: "POST",
+      credentials: "include",
+    }
+  );
+
+  if (!res.ok) throw new Error("Failed to search mcp server");
   return res.json();
 }
-

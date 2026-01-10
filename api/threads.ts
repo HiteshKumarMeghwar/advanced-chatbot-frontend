@@ -37,3 +37,15 @@ export async function fetchThreadMessages(threadId: string) {
   if (!res.ok) throw new Error("Failed to fetch messages");
   return res.json();
 }
+
+
+export async function renameThread(threadId: string, title: string) {
+  const res = await fetch(`${API_URL}/threads/rename/${threadId}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw new Error("Failed to rename thread");
+  return res.json();
+}

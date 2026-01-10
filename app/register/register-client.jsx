@@ -12,7 +12,7 @@ import { useState } from "react";
 import { Chrome } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import GlobalLoading from "@/components/loader";
+import GlobalLoading from "@/app/login/loader";
 import { forgotPassword, googleAuth, register } from "@/api/auth"; 
 
 export default function RegisterPage() {

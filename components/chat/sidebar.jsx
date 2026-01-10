@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronRight, Plus, X, FileText, Star, File, Trash2 } from "lucide-react";
+import { ChevronRight, Plus, X, FileText, Star, File, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FileUploadDrawer from "./file-upload-drawer";
 import { motion } from "framer-motion";
-import { fetchThreads, createThread, deleteThread, fetchThreadMessages } from "@/api/threads";
+import { fetchThreads, createThread, deleteThread, fetchThreadMessages, renameThread } from "@/api/threads";
 import { useRouter } from "next/navigation";
 import { deleteDocument } from "@/api/documents";
 import { toast } from "sonner";
@@ -20,17 +20,29 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from "@/components/ui/input";
 import { userProfile } from "@/api/auth";
+import ThreadTitleDialog from "../thread-title-dialog";
 
 export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId }) {
   const [threads, setThreads] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState("create");   // "create" | "rename"
+  const [renameTarget, setRenameTarget] = useState({ id: "", title: "" });
+  const [showAll, setShowAll] = useState(false);
+  const [showAllDocs, setShowAllDocs] = useState(false);
   const [userData, setUserData] = useState({})
+  const [deleteDoc, setDeleteDoc] = useState(false);
   const router = useRouter();
+  
+  const THREAD_LIMIT = 5;
+  const visibleThreads = showAll ? threads : threads.slice(0, THREAD_LIMIT);
+  
+  const DOCS_LIMIT = 3;
+  const active = threads.find((t) => t.id === activeThreadId) || threads[0];
+  const visibleDocs = showAllDocs ? active?.documents : active?.documents?.slice(0, DOCS_LIMIT);
 
   async function fetchUser() {
     try {
@@ -97,30 +109,54 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
   /* 2.  hide component when closed (same markup always) */
   if (!open) return null;
 
-  const handleConfirmCreateThread = async () => {
-    if (creating) return;
+  const handleConfirmTitle = async (title) => {
+    if (dialogMode === "create") await handleConfirmCreateThread(title);
+    else await handleConfirmRenameThread(renameTarget.id, title);
+    setDialogOpen(false);
+  };
 
-    const title =
-      newTitle.trim() || "Untitled Thread";
+  const handleConfirmCreateThread = async (title) => {
+    if (loading) return;
 
     try {
-      setCreating(true);
       setLoading(true);
-
-      const newThread = await createThread(title);
+      const newThread = await createThread(title || "Untitled Thread");
 
       setThreads((prev) => [newThread, ...prev]);
 
       toast.success("New conversation created");
-
-      setCreateOpen(false);
-      setNewTitle("");
-
       await handleThreadClick(newThread.id);
     } catch (err) {
       toast.error("Failed to create conversation");
     } finally {
-      setCreating(false);
+      setLoading(false);
+    }
+  };
+
+  /* ---------- handlers ---------- */
+  const openCreate = () => {
+    setDialogMode("create");
+    setRenameTarget({ id: "", title: "" });
+    setDialogOpen(true);
+  };
+
+  const openRename = (id, oldTitle) => {
+    setDialogMode("rename");
+    setRenameTarget({ id, title: oldTitle });
+    setDialogOpen(true);
+  };
+
+  const handleConfirmRenameThread = async (id, newTitle) => {
+    try {
+      setLoading(true);
+      await renameThread(id, newTitle);
+      setThreads((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, title: newTitle } : t))
+      );
+      toast.success("Renamed");
+    } catch {
+      toast.error("Rename failed");
+    } finally {
       setLoading(false);
     }
   };
@@ -177,28 +213,30 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
   const handleDeleteDocument = async (docId) => {
     if (!activeThreadId) return;
 
-    // optimistic UI
-    setThreads(prev =>
-      prev.map(t =>
-        t.id === activeThreadId
-          ? { ...t, documents: t.documents.filter(d => d.id !== docId) }
-          : t
-      )
-    );
-
     try {
-      const res = await deleteDocument(activeThreadId, docId);
-      if (res.status === "already_deleted") {
+      setDeleteDoc(true)
+      const data = await deleteDocument(activeThreadId, docId);
+      if (data.status === "already_deleted") {
         toast.info("Document was already removed");
-      }else{
+      } else if (data.status === "deleted") {
+        setThreads(prev =>
+          prev.map(t =>
+            t.id === activeThreadId
+              ? { ...t, documents: t.documents.filter(d => d.id !== docId) }
+              : t
+          )
+        );
         toast.success("Document deleted successfully");
       }
+
     } catch (err) {
       toast.error(err.message);
 
       // rollback
       const refreshed = await fetchThreads();
       setThreads(refreshed);
+    } finally {
+      setDeleteDoc(false)
     }
   };
 
@@ -234,57 +272,14 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
         md:relative md:inset-auto md:z-auto
       "
     >
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Start a new conversation</DialogTitle>
-            <DialogDescription>
-              Give your conversation a name. You can skip this and rename it later.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2 rounded-xl p-2 m-4 transition">
-            <Input
-              placeholder="e.g. Product brainstorming"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleConfirmCreateThread();
-              }}
-              disabled={creating}
-            />
-            <p className="text-xs text-muted-foreground">
-              Leave empty to create an untitled conversation.
-            </p>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <motion.div
-              whileHover={{ scale: 1.2 }}
-              transition={{ type: "spring", stiffness: 300, damping: 10 }}
-            >
-              <Button
-                variant="ghost"
-                onClick={() => setCreateOpen(false)}
-                disabled={creating}
-              >
-                Cancel
-              </Button>
-            </motion.div>
-            <motion.div
-              whileHover={{ scale: 1.2 }}
-              transition={{ type: "spring", stiffness: 300, damping: 10 }}
-            >
-              <Button
-                onClick={handleConfirmCreateThread}
-                disabled={creating}
-              >
-                {creating ? "Creating…" : "Create"}
-              </Button>
-            </motion.div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* single dialog: create OR rename */}
+      <ThreadTitleDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        mode={dialogMode}
+        initialTitle={renameTarget.title}
+        onConfirm={handleConfirmTitle}
+      />
       
       {/* user strip */}
       <motion.div
@@ -328,51 +323,86 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
 
         {/* ----- Documents for ACTIVE thread ----- */}
         <div className="mb-3">
-          <span className="text-xs font-semibold uppercase text-muted-foreground">Uploaded Documents</span>
+          <span className="text-xs font-semibold uppercase text-muted-foreground">
+            Uploaded Documents
+          </span>
         </div>
+
         <ScrollArea className="max-h-[30%] min-h-[6rem] pr-1">
           <div className="space-y-1">
-            {(() => {
-              const active = threads.find((t) => t.id === activeThreadId) || threads[0];
-              if (!active?.documents?.length)
-                return (
-                  <div className="rounded-lg border border-dashed p-1 m-2 text-center">
-                    <FileText className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
-                    <p className="text-xs text-muted-foreground">No documents yet</p>
-                  </div>
-                );
-
-              return (active.documents.map((doc) => {
-                const { icon: Icon, color } = iconByExt(doc.file_type);
-                return (
-                  <div key={doc.id} className="group flex items-center gap-3 rounded-lg border bg-card p-1 m-2 shadow-sm hover:shadow transition-shadow">
-                    <Icon className={`h-5 w-5 ${color}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate" title={doc.file_name}>{doc.file_name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {doc.file_type.toUpperCase()} · {new Date(doc.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
+            {loading || deleteDoc ? (
+              <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <span
+                    key={i}
+                    className="w-1.5 h-1.5 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 animate-pulse"
+                    style={{ animationDelay: `${i * 150}ms` }}
+                  />
+                ))}
+              </div>
+            ) :(
+              !active?.documents?.length ? (
+                <div className="rounded-lg border border-dashed p-1 m-2 text-center">
+                  <FileText className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
+                  <p className="text-xs text-muted-foreground">No documents yet</p>
+                </div>
+              ) : (
+                <>
+                  {visibleDocs.map((doc) => {
+                    const { icon: Icon, color } = iconByExt(doc.file_type);
+                    return (
+                      <div
+                        key={doc.id}
+                        className="group flex items-center gap-3 rounded-lg border bg-card p-1 m-2 shadow-sm hover:shadow transition-shadow"
+                      >
+                        <Icon className={`h-5 w-5 ${color}`} />
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className="text-sm font-medium truncate"
+                            data-tooltip={doc.file_name}
+                          >
+                            {doc.file_name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {doc.file_type.toUpperCase()} ·{" "}
+                            {new Date(doc.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <Button
+                          data-tooltip="Delete Doc"
+                          variant="ghost"
+                          size="icon"
+                          className="
+                            h-4 w-4 text-red-500 opacity-0
+                            group-hover:opacity-100 cursor-pointer
+                            transition
+                          "
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteDocument(doc.id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+  
+                  {active.documents.length > DOCS_LIMIT && (
                     <Button
-                      title="Delete Doc"
                       variant="ghost"
-                      size="icon"
-                      className="
-                        h-4 w-4 text-red-500 opacity-0
-                        group-hover:opacity-100 cursor-pointer
-                        transition
-                      "
-                      onClick={(e) => {
-                        e.stopPropagation(); // don’t trigger thread switch
-                        handleDeleteDocument(doc.id);
-                      }}
+                      size="sm"
+                      onClick={() => setShowAllDocs((v) => !v)}
+                      className="text-center"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      {showAllDocs
+                        ? "Show less"
+                        : `See all (${active.documents.length})`}
                     </Button>
-                  </div>
-                );
-              }))
-            })()}
+                  )}
+                </>
+              )
+            )}
           </div>
         </ScrollArea>
 
@@ -380,14 +410,14 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
 
         {/* ----- Threads title and and list ----- */}
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase text-muted-foreground">Threads</span>
+          <span className="text-xs font-semibold uppercase text-muted-foreground">Conversations</span>
           <motion.div
             whileHover={{ scale: 1.08 }}
             transition={{
               scale: { type: "spring", stiffness: 120, damping: 14 },
             }}
           >
-          <Button title="Add New Thread" variant="ghost" size="icon-xs" onClick={() => setCreateOpen(true)}>
+          <Button data-tooltip="Add New Thread" variant="ghost" size="icon-xs" onClick={openCreate}>
             <Plus className="h-4 w-4" />
           </Button>
           </motion.div>
@@ -395,7 +425,15 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
         <ScrollArea className="flex-1 min-h-0 pr-1">
           <div className="space-y-1">
             {loading ? (
-                <p className="text-xs text-center bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 bg-clip-text text-transparent animate-pulse drop-shadow-sm">Loading…</p>
+                <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <span
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 animate-pulse"
+                      style={{ animationDelay: `${i * 150}ms` }}
+                    />
+                  ))}
+                </div>
               ) : threads.length === 0 ? (
               <motion.div
                 initial={{ opacity: 0, y: 6 }}
@@ -408,44 +446,76 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
                 </p>
               </motion.div>
             ) : (
-              threads.map((t) => (
-                <motion.div
-                  key={t.id}
-                  whileHover={{ scale: 1.03 }}
-                  transition={{ type: "spring", stiffness: 120, damping: 16 }}
-                  className={`
-                    group flex items-center gap-3 rounded-lg border bg-card p-1 m-2 shadow-sm hover:shadow transition-shadow
-                    ${
-                      activeThreadId === t.id
-                        ? "bg-primary/10 shadow-sm ring-1 ring-primary/30"
-                        : "hover:bg-muted"
-                    }
-                  `}
-                >
-                  {/* left side – title */}
-                  <Button
-                    title={t.title || "Untitled Thread"}
-                    variant="ghost"
-                    onClick={() => handleThreadClick(t.id)}
-                    className="flex-1 justify-start text-left"
+              <>
+                {visibleThreads.map((t) => (
+                  <motion.div
+                    key={t.id}
+                    whileHover={{ scale: 1.03 }}
+                    transition={{ type: "spring", stiffness: 120, damping: 16 }}
+                    className={`
+                      group flex items-center gap-3 rounded-lg border bg-card p-1 m-2 shadow-sm hover:shadow transition-shadow
+                      ${
+                        activeThreadId === t.id
+                          ? "bg-primary/10 shadow-sm ring-1 ring-primary/30"
+                          : "hover:bg-muted"
+                      }
+                    `}
                   >
-                    {truncateTitle(t.title, 18)}
-                  </Button>
-                  {/* right side – trash */}
-                  <Button
-                    title="Delete Thread"
-                    variant="ghost"
-                    size="icon"
-                    className="text-red-500 opacity-0 group-hover:opacity-100 transition"
-                    onClick={(e) => {
-                      e.stopPropagation(); // don’t trigger thread switch
-                      handleDeleteThread(t.id);
-                    }}
+                    {/* left side – title */}
+                    <Button
+                      data-tooltip={t.title || "Untitled Thread"}
+                      variant="ghost"
+                      onClick={() => handleThreadClick(t.id)}
+                      className="flex-1 justify-start text-left"
+                    >
+                      {truncateTitle(t.title, 15)}
+                    </Button>
+                    {/* right side – three-dot menu */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="opacity-0 group-hover:opacity-100 transition"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+
+                      <DropdownMenuContent align="end" sideOffset={4}>
+                        <DropdownMenuItem onSelect={() => openRename(t.id, t.title)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Rename
+                        </DropdownMenuItem>
+
+                        <DropdownMenuItem
+                          onSelect={() => handleDeleteThread(t.id)}
+                          className="text-red-600 focus:text-red-600"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </motion.div>
+                ))}
+                {threads.length > THREAD_LIMIT && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="mt-2 flex justify-center"
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </motion.div>
-              ))
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowAll((v) => !v)}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      {showAll ? "Show less" : `See all (${threads.length})`}
+                    </Button>
+                  </motion.div>
+                )}
+              </>
             )}
           </div>
         </ScrollArea>

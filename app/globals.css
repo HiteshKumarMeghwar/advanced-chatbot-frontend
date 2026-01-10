@@ -26,9 +26,46 @@
     height: 6px;
   }
   .prose .overflow-x-auto::-webkit-scrollbar-thumb {
-    @apply bg-purple-500/80 rounded-full;
+      @apply bg-purple-500/80 rounded-full;
+    }
+  .frost-panel {
+    @apply rounded-2xl border border-white/10 bg-white/5 dark:bg-black/10 backdrop-blur-xl shadow-lg;
+  }
+  .no-resize-handle {
+    resize: none;
+    overflow: hidden;
+  }
+  /* invisible scrollbar for prompt box */
+  .invisible-scroll::-webkit-scrollbar {
+    display: none; /* Chrome / Edge / Safari */
+  }
+  .invisible-scroll {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE 10+ */
+  }
+  .ui-tooltip {
+    position: fixed;               /* 🔑 ABSOLUTE KILLER FIX */
+    z-index: 9999;
+
+    pointer-events: none;          /* never interfere with mouse */
+    max-width: 260px;
+    padding: 6px 10px;
+
+    white-space: normal;
+    word-wrap: break-word;
+
+    background: rgba(47, 45, 45, 0.85);
+    color: #fff;
+    font-size: 12px;
+    border-radius: 6px;
+
+    transform: translateZ(0);      /* GPU isolation */
+  }
+  html, body {
+    overflow-x: hidden;
   }
 }
+
 
 @custom-variant dark (&:is(.dark *));
 

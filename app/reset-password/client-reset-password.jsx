@@ -12,7 +12,7 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import Header from "@/components/layout/header";
 import Footer from "@/components/layout/footer";
-import GlobalLoading from "@/components/loader";
+import GlobalLoading from "@/app/login/loader";
 import { resetPassword } from "@/api/auth";
 
 export default function ResetPasswordPage() {

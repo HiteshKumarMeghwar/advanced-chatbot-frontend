@@ -24,10 +24,10 @@ export default function SettingsPage() {
 
           <TabsContent value="overview" className="mt-6 space-y-4">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <MetricCard title="Total Revenue" value="$12,345" icon={CreditCard} />
-              <MetricCard title="Active Users" value="1,234" icon={User} />
-              <MetricCard title="Sales" value="+234" icon={Activity} />
-              <MetricCard title="Configurations" value="12" icon={Settings} />
+              <MetricCard data-tooltip="Total Revenue" value="$12,345" icon={CreditCard} />
+              <MetricCard data-tooltip="Active Users" value="1,234" icon={User} />
+              <MetricCard data-tooltip="Sales" value="+234" icon={Activity} />
+              <MetricCard data-tooltip="Configurations" value="12" icon={Settings} />
             </div>
 
             <Card>

@@ -3,6 +3,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import TopLoader from "@/components/top-loader";
 import ThemeSync from "@/components/theme-sync";
+import UiTooltipPortal from '@/components/UiTooltipPortal';
 import Script from "next/script";
 import { Toaster } from "sonner";
 
@@ -37,6 +38,7 @@ export default function RootLayout({ children }) {
           <ThemeSync />   {/* 👈 inject user theme here */}
           <TopLoader />
           {children}
+          <UiTooltipPortal />   {/* ← client tooltip injected here */}
           <Toaster position="top-right" richColors />
         </ThemeProvider>
       </body>

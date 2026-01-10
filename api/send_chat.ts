@@ -5,23 +5,28 @@ interface ChatSSEOptions {
   threadId: string;
   query: string;
   image_url?: string | null;
+  edit_message_id?: number | null;
   onToken: (token: string) => void;
   onInterrupt?: (data: any) => void;
   onError?: (error: string) => void;
   onDone?: () => void;
+  onMessageCreated?: (messageId: number) => void;
 }
 
 export function sendChatSSE({
   threadId,
   query,
   image_url,
+  edit_message_id,
   onToken,
   onInterrupt,
   onError,
   onDone,
+  onMessageCreated,
 }: ChatSSEOptions): () => void {
   const controller = new AbortController();
   let aborted = false;
+  let messageIdReceived = false;
 
   // Start the POST request
   fetch(`${API_URL}/chat/stream`, {
@@ -35,6 +40,7 @@ export function sendChatSSE({
       thread_id: threadId,
       query: query.trim(),
       image_url: image_url ?? null,
+      edit_message_id: edit_message_id ?? null,
     }),
   })
     .then(async (response) => {
@@ -45,7 +51,7 @@ export function sendChatSSE({
 
       if (!response.body) throw new Error("No response body");
 
-      const reader = response.body.getReader();
+      const reader = response.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
 
@@ -56,17 +62,16 @@ export function sendChatSSE({
 
           buffer += decoder.decode(value, { stream: true });
 
-          const parts = buffer.split("\n\n");
-          buffer = parts.pop() || "";
+          // Split on \n\n but keep the last incomplete part in buffer
+          let parts = buffer.split("\n\n");
+          const completeParts = parts.slice(0, -1);  // All complete events
+          buffer = parts[parts.length - 1];          // Remainder (incomplete)
 
-          for (const part of parts) {
+          for (const part of completeParts) {
             if (!part.trim()) continue;
 
-            const dataLine = part
-              .split("\n")
-              .find((line) => line.startsWith("data:"))
-              ?.slice(5)
-              .trim();
+            const lines = part.split("\n");
+            const dataLine = lines.find(l => l.startsWith("data:"))?.substring(5).trim();
 
             if (!dataLine) continue;
 
@@ -93,8 +98,15 @@ export function sendChatSSE({
               if (data.token) {
                 onToken(data.token);
               }
+              
+              /* message id handshake (ONCE) */
+              if (data.type === "message_created" && !messageIdReceived) {
+                messageIdReceived = true;
+                onMessageCreated?.(data.message_id);
+                // DO NOT return / DO NOT continue stream loop
+              }
             } catch (e) {
-              console.error("Parse error:", dataLine);
+              console.error("Failed to parse SSE data:", dataLine, e);
             }
           }
         }

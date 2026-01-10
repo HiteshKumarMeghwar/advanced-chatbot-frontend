@@ -11,7 +11,6 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import GlobalLoading from "@/components/loader";
 import { login } from "@/api/auth"; 
 
 export default function LoginPage() {
@@ -42,9 +41,6 @@ export default function LoginPage() {
   return (
     <>
     <Header />
-    {loading ? (
-      <GlobalLoading />
-    ) : (
       <div className="min-h-[calc(89vh-4rem)] flex items-center justify-center bg-gradient-to-br from-sky-50 to-indigo-100 dark:from-gray-900 dark:to-black px-4">
         <Card className="w-full max-w-sm">
           <CardHeader className="space-y-1">
@@ -111,7 +107,6 @@ export default function LoginPage() {
           </CardFooter>
         </Card>
       </div>
-    )}
     <Footer />
     </>
   );
