@@ -23,6 +23,7 @@ import {
   UserCircle,
   Wrench,
   Plug,
+  Loader2,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ import LoadingModal from "@/components/chat/prompt-loading-modal";
 import { fetchMcpServers, createMcpServer, deleteMcpServer, refreshTools } from "@/api/mcp_server";
 import { toast } from "sonner";
 import { forwardRef, useImperativeHandle } from "react";
+import { disconnectAccount, fetchAccounts, toggleAccount } from "@/api/integration_acconts";
 
 /* map backend name -> nice icon */
 const iconMap = {
@@ -78,6 +80,10 @@ const PromptInput = forwardRef(function PromptInputFn(
   /* ----------  state  ---------- */
   const [value, setValue] = useState("");
   const [tools, setTools] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [connecting, setConnecting] = useState(false);
+  const [providerState, setProviderState] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [showPlaceholder, setShowPlaceholder] = useState(true);
   const [mcpOpen, setMcpOpen] = useState(false);
@@ -137,6 +143,18 @@ const PromptInput = forwardRef(function PromptInputFn(
     loadTools();
   }, []);
 
+  useEffect(() => {
+    loadAccounts();
+  }, []);
+
+  const loadAccounts = async () => {
+    try {
+      const data = await fetchAccounts();
+      setAccounts(data);
+    } catch {
+      setAccounts([]);
+    }
+  };
 
   /* ----------  optimistic toggle (user status only)  ---------- */ // ..............................
   const toggleUserStatus = async (name) => {
@@ -630,45 +648,84 @@ const PromptInput = forwardRef(function PromptInputFn(
                   <PopoverContent side="right" className="w-56 p-2">
                     <div className="text-sm font-medium mb-2">Accounts</div>
                     <div className="space-y-1 max-h-[60vh] overflow-auto">
-                      {[
-                        { name: "Facebook",  integrated: true,  active: true  },
-                        { name: "Gmail",     integrated: true,  active: false },
-                        { name: "GitHub",    integrated: false, active: false },
-                        { name: "Twitter",   integrated: true,  active: true  },
-                      ].map((acc) => (
-                        <div
-                          key={acc.name}
-                          className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted transition-colors"
-                        >
-                          {/* left icon + label */}
-                          <UserCircle className="h-4 w-4 shrink-0" />
-                          <span className="font-medium flex-1">{acc.name}</span>
+                      {["facebook", "google", "github", "twitter"].map((provider) => {
+                        const acc = accounts.find(a => a.provider === provider);
+                        return (
+                          <div
+                            key={provider}
+                            className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
+                          >
+                            <UserCircle className="h-4 w-4" />
+                            <span className="flex-1 capitalize">{provider}</span>
 
-                          {/* right-end icons */}
-                          <div className="flex items-center gap-2">
-                            {/* integration status */}
-                            <motion.div whileHover={{ scale: 1.2 }} transition={{ type: "spring", stiffness: 300, damping: 10 }}>
-                              <Plug
-                                className={`h-4 w-4 ${
-                                  acc.integrated ? "text-green-500" : "text-gray-400"
-                                }`}
-                                title={acc.integrated ? "Integrated" : "Not integrated"}
-                              />
-                            </motion.div>
-
-                            {/* activate / deactivate toggle */}
-                            <motion.div whileHover={{ scale: 1.2 }} transition={{ type: "spring", stiffness: 300, damping: 10 }}>
-                              <Switch
-                                checked={acc.active}
-                                onCheckedChange={(checked) => {
-                                  /* your toggle logic here */
-                                  console.log(`${acc.name} -> ${checked ? "active" : "inactive"}`);
+                            {/* CONNECT */}
+                            {!acc && (
+                              <Button 
+                                size="xs" 
+                                disabled={connecting}
+                                className="mr-3"
+                                onClick={() => {
+                                  window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/accounts/${provider}/login`;
+                                  setConnecting(true);
+                                  setProviderState(provider)
                                 }}
-                              />
-                            </motion.div>
+                              >
+                                {connecting && providerState === provider ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Connecting...
+                                  </>
+                                ) : (
+                                  "Connect"
+                                )}
+                              </Button>
+                            )}
+
+                            {/* CONNECTED */}
+                            {acc && (
+                              <div className="flex items-center gap-2">
+                                {/* <Plug className="h-4 w-4 text-green-500" /> */}
+
+                                <Switch
+                                  checked={acc.is_active}
+                                  data-tooltip={acc.is_active ? `Disable ${provider}` : `Enable ${provider}`}
+                                  onCheckedChange={async (checked) => {
+                                    await toggleAccount(acc.id, checked);
+                                    loadAccounts();
+                                    if(acc.is_active){
+                                      toast.success(`Disabled ${provider}`)
+                                    }else{
+                                      toast.success(`Enabled ${provider}`)
+                                    }
+                                  }}
+                                />
+
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  disabled={deleting}
+                                  data-tooltip={`Disconnect ${provider}`}
+                                  onClick={async () => {
+                                    setDeleting(true)
+                                    setProviderState(provider)
+                                    await disconnectAccount(acc.id);
+                                    loadAccounts();
+                                    setDeleting(false)
+                                    setProviderState("")
+                                    toast.success(`Disconnected ${provider}`)
+                                  }}
+                                >
+                                  {deleting && providerState === provider ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    "✕"
+                                  )}
+                                </Button>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </PopoverContent>
                 </Popover>

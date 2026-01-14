@@ -11,7 +11,7 @@ import Image from 'next/image'
 import { motion } from "framer-motion";
 import Snowflakes from "./snow-flakes"
 import { v4 as uuidv4 } from "uuid";
-import { ChevronDown, Eye, EyeOff } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, SnowflakeIcon } from "lucide-react";
 import { ReadAloudLanguageModal } from "@/components/chat/read_aloud_modal";
 import { speakText, stopSpeech } from "@/components/chat/speechEngine";
 // import InterruptModal from "@/components/chat/interrupt-modal";
@@ -24,6 +24,7 @@ export default function ChatPage() {
   const [streamingMessageId, setStreamingMessageId] = useState(null);
   const [waitingForBackend, setWaitingForBackend] = useState(false);
   const [inputVisible, setInputVisible] = useState(true);
+  const [showSnow, setShowSnow] = useState(true); // default ON
   
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [isEditOrRegenerate, setIsEditOrRegenerate] = useState(false);
@@ -271,8 +272,8 @@ export default function ChatPage() {
         {/* messages */}
         <ScrollArea className="flex-1 py-4 bg-transparent" ref={scrollRef}>
           <div className="mx-auto w-full max-w-4xl px-2 sm:px-4">
-            <Snowflakes />
-            <SnowFall />
+            {showSnow && <Snowflakes />}
+            {showSnow && <SnowFall />}
             {messages.length === 0 ? (
               // ---------- Empty state ----------
               <>
@@ -429,6 +430,33 @@ export default function ChatPage() {
                       <EyeOff className="h-4 w-4 text-white/80" />
                     ) : (
                       <Eye className="h-4 w-4 text-white/80" />
+                    )}
+                  </motion.div>
+                </Button>
+
+                {/* snow toggle */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  data-tooltip={showSnow ? "Hide snow" : "Show snow"}
+                  onClick={() => setShowSnow((s) => !s)}
+                  className="h-9 w-9 rounded-full
+                            bg-white/10 dark:bg-black/20 backdrop-blur
+                            border border-white/20 shadow-md
+                            hover:bg-white/20 dark:hover:bg-black/30
+                            transition-all"
+                >
+                  <motion.div
+                    key={showSnow ? "snow-on" : "snow-off"}
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.8, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 10 }}
+                  >
+                    {showSnow ? (
+                      <SnowflakeIcon className="h-4 w-4 text-white/80" />
+                    ) : (
+                      <SnowflakeIcon className="h-4 w-4 text-white/40" />
                     )}
                   </motion.div>
                 </Button>
