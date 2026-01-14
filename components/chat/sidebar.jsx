@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from "@/components/ui/input";
-import { userProfile } from "@/api/auth";
 import ThreadTitleDialog from "../thread-title-dialog";
 
 export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId }) {
@@ -33,7 +32,6 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
   const [renameTarget, setRenameTarget] = useState({ id: "", title: "" });
   const [showAll, setShowAll] = useState(false);
   const [showAllDocs, setShowAllDocs] = useState(false);
-  const [userData, setUserData] = useState({})
   const [deleteDoc, setDeleteDoc] = useState(false);
   const router = useRouter();
   
@@ -43,16 +41,6 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
   const DOCS_LIMIT = 3;
   const active = threads.find((t) => t.id === activeThreadId) || threads[0];
   const visibleDocs = showAllDocs ? active?.documents : active?.documents?.slice(0, DOCS_LIMIT);
-
-  async function fetchUser() {
-    try {
-      const res = await userProfile();
-      const data = await res.json();
-      setUserData(data)
-    } catch (e) {
-      console.log(e)
-    }
-  }
 
   // fetch threads on mount
   useEffect(() => {
@@ -83,7 +71,7 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
     };
 
     initThreads();
-    fetchUser();
+    // fetchUser();
   }, [open]);
 
 
@@ -260,8 +248,7 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
     if (!text) return "Untitled Thread";
     return text.length > max ? text.slice(0, max) + "…" : text;
   };
-
-  const user = { name: userData.name || "MeghX", email: userData.email || "meghx@gmail.com" };
+  
 
   /* 3.  responsive classes – desktop permanent, mobile absolute overlay */
   return (
@@ -282,24 +269,24 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
       />
       
       {/* user strip */}
-      <motion.div
+      {/* <motion.div
         whileHover={{ scale: 1.15 }} // subtle 15 % growth
         transition={{
           scale: { type: "spring", stiffness: 80, damping: 15 }, // gentle spring
         }}
-      >
+      > */}
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Avatar>
+        {/* <Avatar>
           <AvatarFallback>{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
         </Avatar>
         <div className="flex-1 overflow-hidden">
           <p className="text-sm font-medium truncate">{user.name}</p>
           <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-        </div>
+        </div> */}
       </div>
-      </motion.div>
+      {/* </motion.div>
 
-      <Separator />
+      <Separator /> */}
 
       <div className="flex-1 min-h-0 m-4 flex flex-col">
         {/* ----- Document Upload System ----- */}

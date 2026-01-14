@@ -39,6 +39,8 @@ export default function ChatPage() {
   const bottomRef  = useRef(null);
   const promptRef = useRef(null);
 
+  const msgCount = messages.length;
+
   useEffect(() => {
     const viewport = scrollRef.current?.querySelector(
       "[data-radix-scroll-area-viewport]"
@@ -405,8 +407,11 @@ export default function ChatPage() {
             <div ref={bottomRef} />
             {/* sticky bottom input – stays visible while messages scroll above */}
             <div className="sticky bottom-0 z-10 mt-6">
+
               {/* bottom-right button group */}
               <div className="fixed bottom-36 right-8 z-50 flex flex-col gap-2">
+                {/* message count */}
+                <MessageCounter count={msgCount} />
                 {/* show/hide input */}
                 <Button
                   variant="ghost"
@@ -483,6 +488,7 @@ export default function ChatPage() {
                   </motion.button>
                 )}
               </div>
+
               {inputVisible && (
                 <div className="px-4 py-3">
                   <PromptInput
@@ -569,5 +575,23 @@ function SnowFall() {
         }
       }
     `}</style>
+  );
+}
+
+
+function MessageCounter({ count }) {
+  return (
+    <motion.div
+      initial={{ scale: 0.8, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      key={count} // re-animate on change
+      className="flex items-center justify-center h-9 w-9 rounded-full
+                 bg-white/10 dark:bg-black/20 backdrop-blur
+                 border border-white/20 shadow-md
+                 text-xs font-semibold text-white/80"
+      data-tooltip={`${count} messages in this conversation`}
+    >
+      {count}
+    </motion.div>
   );
 }

@@ -19,6 +19,7 @@ import Sidebar from "@/components/chat/sidebar";
 import TopLoader from "@/components/top-loader";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useUserStore } from "@/store/useUserStore";
+import Footer from "@/components/layout/footer";
 
 export default function ProfilePage() {
   const [edit, setEdit] = useState(false);
@@ -47,7 +48,7 @@ export default function ProfilePage() {
     <div className="flex h-screen bg-background">
       {/* <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} /> */}
 
-      <div className="flex flex-1 flex-col m-2">
+      <div className="flex-1 overflow-y-auto pt-16 pb-20">
         <Header
           // sidebar
           // sidebarOpen={sidebarOpen}
@@ -180,6 +181,7 @@ export default function ProfilePage() {
             </Card>
           </div>
         </motion.div>
+        <Footer />
       </div>
     </div>
   );

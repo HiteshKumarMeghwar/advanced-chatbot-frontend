@@ -99,7 +99,7 @@ export default function RegisterPage() {
       {loading ? (
           <GlobalLoading />
         ) : (
-          <div className="min-h-[calc(89vh-4rem)] flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-gray-900 dark:to-black px-4">
+          <div className="flex items-center justify-center pt-16 pb-20 bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-gray-900 dark:to-black px-4">
             <Card className="w-full max-w-sm">
               <CardHeader className="space-y-1">
                 <CardTitle className="text-2xl text-center">Create account</CardTitle>
