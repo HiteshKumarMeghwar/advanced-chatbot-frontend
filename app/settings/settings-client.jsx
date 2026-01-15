@@ -70,11 +70,11 @@ export default function SettingsPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              <Tabs defaultValue="pii">
+              <Tabs defaultValue="memory">
                 <TabsList className="grid w-full max-w-xl grid-cols-3 rounded-xl bg-black/10 backdrop-blur">
-                  <TabsTrigger value="pii">PII & Metrics</TabsTrigger>
                   <TabsTrigger value="memory">User Memory</TabsTrigger>
                   <TabsTrigger value="expenses">Expenses</TabsTrigger>
+                  <TabsTrigger value="pii">PII & Metrics</TabsTrigger>
                 </TabsList>
 
                 <AnimatePresence mode="wait">
@@ -200,6 +200,7 @@ function Toggle({ label, value, on, delay = 0 }) {
 function MemoryCard({ title, data, type, setData }) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(new Set());
+  const isRules = type === "procedural"; // procedural = single list
 
   const filtered = useMemo(() => {
     return data.filter((m) => (m.content || m.fact || "").toLowerCase().includes(search.toLowerCase()));
@@ -226,7 +227,7 @@ function MemoryCard({ title, data, type, setData }) {
 
   async function deleteAll() {
     await fetch(`${API_URL}/memory/${type}/delete_all`, {
-      method: "DELETE",
+      method: "POST",
       credentials: "include",
     });
     setData([]);
@@ -242,8 +243,17 @@ function MemoryCard({ title, data, type, setData }) {
       <GlassCard>
         <CardHeader className="flex flex-row justify-between items-center">
           <CardTitle>{title}</CardTitle>
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={deleteSelected} disabled={!selected.size}>
+          <div className="flex gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Button size="sm" variant="outline" onClick={deleteSelected} disabled={!selected.size} className={isRules ? "hidden" : ""}>
               Delete Selected
             </Button>
             <Button size="sm" variant="destructive" onClick={deleteAll}>
@@ -253,16 +263,6 @@ function MemoryCard({ title, data, type, setData }) {
         </CardHeader>
 
         <CardContent className="space-y-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-
           <AnimatePresence>
             {filtered.length === 0 && (
               <motion.div
@@ -286,8 +286,10 @@ function MemoryCard({ title, data, type, setData }) {
                   exit={{ opacity: 0, x: -10 }}
                   className="flex items-start gap-2 border rounded-lg p-2 bg-white/5 hover:bg-white/10 transition-colors"
                 >
-                  <Checkbox checked={selected.has(m.id)} onCheckedChange={() => toggleSelect(m.id)} />
-                  <div className="text-sm truncate">{m.content || m.fact || JSON.stringify(m)}</div>
+                  {!isRules && (
+                    <Checkbox checked={selected.has(m.id)} onCheckedChange={() => toggleSelect(m.id)} />
+                  )}
+                  <div className="text-sm whitespace-pre-line">{m.content || m.fact || prettyRules(m)}</div>
                 </motion.div>
               ))}
             </div>
@@ -296,6 +298,17 @@ function MemoryCard({ title, data, type, setData }) {
       </GlassCard>
     </motion.div>
   );
+}
+
+function prettyRules(obj) {
+  if (!obj.rules) return JSON.stringify(obj); // fallback
+  try {
+    const list = JSON.parse(obj.rules); // expect ["rule1","rule2"]
+    if (!Array.isArray(list) || list.length === 0) return "—";
+    return list.map((r, i) => `• ${r}`).join("\n"); // bullet list
+  } catch {
+    return String(obj.rules); // not valid JSON → plain text
+  }
 }
 
 function ExpensesDashboard() {
