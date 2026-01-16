@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { ChevronRight, Plus, X, FileText, Star, File, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -34,6 +34,7 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
   const [showAllDocs, setShowAllDocs] = useState(false);
   const [deleteDoc, setDeleteDoc] = useState(false);
   const router = useRouter();
+  const scrollRef = useRef(null);
   
   const THREAD_LIMIT = 5;
   const visibleThreads = showAll ? threads : threads.slice(0, THREAD_LIMIT);
@@ -41,6 +42,17 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
   const DOCS_LIMIT = 3;
   const active = threads.find((t) => t.id === activeThreadId) || threads[0];
   const visibleDocs = showAllDocs ? active?.documents : active?.documents?.slice(0, DOCS_LIMIT);
+
+  const scrollActiveIntoView = () => {
+    if (!activeThreadId || !scrollRef.current) return;
+    const node = scrollRef.current.querySelector(`[data-thread-id="${activeThreadId}"]`);
+    if (node) node.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  };
+
+  useEffect(() => {
+    // wait for DOM paint + any expansion
+    requestAnimationFrame(scrollActiveIntoView);
+  }, [activeThreadId, showAll]);
 
   // fetch threads on mount
   useEffect(() => {
@@ -404,12 +416,20 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
               scale: { type: "spring", stiffness: 120, damping: 14 },
             }}
           >
-          <Button data-tooltip="Add New Thread" variant="ghost" size="icon-xs" onClick={openCreate}>
+          <Button 
+            data-tooltip="Add New Thread"
+            variant="ghost" 
+            size="icon-xs" 
+            onClick={openCreate}
+            className="h-9 w-9 rounded-full border border-border bg-background/70 backdrop-blur-sm \
+            hover:bg-muted hover:shadow-md transition-all duration-200 \
+            flex items-center justify-center"
+          >
             <Plus className="h-4 w-4" />
           </Button>
           </motion.div>
         </div>
-        <ScrollArea className="flex-1 min-h-0 pr-1">
+        <ScrollArea className="flex-1 min-h-0 pr-1" ref={scrollRef}>
           <div className="space-y-1">
             {loading ? (
                 <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground">
@@ -437,6 +457,7 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
                 {visibleThreads.map((t) => (
                   <motion.div
                     key={t.id}
+                    data-thread-id={t.id}
                     whileHover={{ scale: 1.03 }}
                     transition={{ type: "spring", stiffness: 120, damping: 16 }}
                     className={`
@@ -453,9 +474,12 @@ export default function Sidebar({ open, setOpen, onThreadSelect, activeThreadId 
                       data-tooltip={t.title || "Untitled Thread"}
                       variant="ghost"
                       onClick={() => handleThreadClick(t.id)}
-                      className="flex-1 justify-start text-left"
+                      className="flex-1 justify-start text-left flex flex-col items-start"
                     >
-                      {truncateTitle(t.title, 15)}
+                      <span className="leading-tight">{truncateTitle(t.title, 15)}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(t.created_at).toLocaleString()}
+                      </span>
                     </Button>
                     {/* right side – three-dot menu */}
                     <DropdownMenu>

@@ -151,7 +151,7 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sky-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:via-gray-900 dark:to-black">
+    <div className="min-h-screen pt-16 pb-20 bg-gradient-to-br from-sky-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:via-gray-900 dark:to-black">
       {/* ---- HEADER ---- */}
       <Header />
 

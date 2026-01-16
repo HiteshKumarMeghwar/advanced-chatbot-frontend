@@ -563,7 +563,9 @@ const PromptInput = forwardRef(function PromptInputFn(
                     whileHover={{ scale: 1.25 }}
                     animate={{ rotate: popoverOpen ? 45 : 0 }}
                     transition={{ type: "spring", stiffness: 300, damping: 10 }}
-                  >
+                    className="h-9 w-9 rounded-full border border-border bg-background/70 backdrop-blur-sm \
+                    hover:bg-muted hover:shadow-md transition-all duration-200 \
+                    flex items-center justify-center">
                     <Plus className="h-5 w-5" />
                   </motion.div>
                 </Button>
@@ -803,6 +805,9 @@ const PromptInput = forwardRef(function PromptInputFn(
                       scale: { type: "spring", stiffness: 300, damping: 10 },
                       rotate: { duration: 0.2 },
                     }}
+                    className="h-9 w-9 rounded-full border border-border bg-background/70 backdrop-blur-sm \
+                    hover:bg-muted hover:shadow-md transition-all duration-200 \
+                    flex items-center justify-center"
                   >
                     <Mic className="h-5 w-5" />
                   </motion.div>
@@ -826,6 +831,9 @@ const PromptInput = forwardRef(function PromptInputFn(
                       scale: { type: "spring", stiffness: 300, damping: 10 },
                       rotate: { duration: 0.2 },
                     }}
+                    className="h-9 w-9 rounded-full border border-border bg-background/70 backdrop-blur-sm \
+                    hover:bg-muted hover:shadow-md transition-all duration-200 \
+                    flex items-center justify-center"
                   >
                     <Send className="h-5 w-5" />
                   </motion.div>
