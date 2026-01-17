@@ -1,3 +1,5 @@
+import { toast } from "sonner";
+
 // utils/sendChatSSE.ts
 const API_URL = process.env.NEXT_PUBLIC_API_URL as string;
 
@@ -83,6 +85,16 @@ export function sendChatSSE({
             try {
               const data = JSON.parse(dataLine);
 
+              if (data.type === "telemetry" && Array.isArray(data.ui_events)) {
+                data.ui_events.forEach((evt) => {
+                  const message = TOAST_COPY[evt.type];
+                  if (!message) return;
+
+                  toast[evt.severity || "default"](message, { duration: 3000 });
+                });
+              }
+
+
               if (data.type === "interrupt") {
                 onInterrupt?.(data);
                 onDone?.();
@@ -131,6 +143,15 @@ export function sendChatSSE({
     controller.abort();
   };
 }
+
+export const TOAST_COPY = {
+  memory_used: "Using your previous context to improve this response.",
+  memory_updated: "Saved for future conversations.",
+  privacy_protected: "Sensitive details were automatically protected.",
+  conversation_compacted: "Older messages were compressed to keep things fast.",
+  model_degraded: "Response generated with limited capacity.",
+};
+
 
 // export async function sendChatSSE({ threadId, query, onToken, onDone }) {
 //   const res = await fetch(`${API_URL}/chat/stream`, {

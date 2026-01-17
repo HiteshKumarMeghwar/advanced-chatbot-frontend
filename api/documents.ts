@@ -7,11 +7,14 @@ export function uploadDocuments(files, threadId, onProgress) {
 
     // progress
     xhr.upload.addEventListener("progress", (e) => {
-      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 50));
     });
 
     xhr.addEventListener("load", () => {
+      onProgress?.(80);
       if (xhr.status >= 200 && xhr.status < 300) {
+        // Backend finished everything
+        onProgress?.(100);
         resolve(JSON.parse(xhr.responseText));
       } else {
         reject(new Error(xhr.responseText || "Upload failed"));

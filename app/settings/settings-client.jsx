@@ -74,12 +74,12 @@ export default function SettingsPage() {
                 <TabsList className="grid w-full max-w-xl grid-cols-3 rounded-xl bg-black/10 backdrop-blur">
                   <TabsTrigger value="memory">User Memory</TabsTrigger>
                   <TabsTrigger value="expenses">Expenses</TabsTrigger>
-                  <TabsTrigger value="pii">PII & Metrics</TabsTrigger>
+                  {/* <TabsTrigger value="pii">PII & Metrics</TabsTrigger> */}
                 </TabsList>
 
                 <AnimatePresence mode="wait">
                   {/* ----------- PII ----------- */}
-                  <TabsContent key="pii" value="pii" className="space-y-4">
+                  {/* <TabsContent key="pii" value="pii" className="space-y-4">
                     <Grid4>
                       <MetricCard title="Extractions Total" value={metrics.extraction_total ?? 0} delay={0} />
                       <MetricCard title="Extraction Failures" value={metrics.extraction_failures ?? 0} delay={0.1} />
@@ -111,7 +111,7 @@ export default function SettingsPage() {
                         )}
                       </CardContent>
                     </GlassCard>
-                  </TabsContent>
+                  </TabsContent> */}
 
                   {/* ----------- MEMORY ----------- */}
                   <TabsContent key="memory" value="memory" className="space-y-6">
