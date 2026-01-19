@@ -7,6 +7,7 @@ interface ChatSSEOptions {
   threadId: string;
   query: string;
   image_url?: string | null;
+  ocr_text?: string | null;
   edit_message_id?: number | null;
   onToken: (token: string) => void;
   onInterrupt?: (data: any) => void;
@@ -19,6 +20,7 @@ export function sendChatSSE({
   threadId,
   query,
   image_url,
+  ocr_text,
   edit_message_id,
   onToken,
   onInterrupt,
@@ -42,6 +44,7 @@ export function sendChatSSE({
       thread_id: threadId,
       query: query.trim(),
       image_url: image_url ?? null,
+      ocr_text: ocr_text ?? null,
       edit_message_id: edit_message_id ?? null,
     }),
   })

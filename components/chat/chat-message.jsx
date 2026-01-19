@@ -244,15 +244,17 @@ export default function ChatMessage({
                         alt="uploaded"
                         onClick={() => setPreviewOpen(true)}
                         className="
-                          max-w-xs sm:max-w-sm
+                          size-16                    /* 64 × 64 px */
+                          aspect-square              /* keeps 1:1 on every screen */
                           rounded-xl
                           border-2
-                          shadow-md
+                          shadow-sm
                           cursor-pointer
                           transition
-                          hover:scale-[1.02]
+                          hover:scale-105
                           hover:opacity-90
                           dark:border-gray-700
+                          object-cover               /* image fills the tile without stretch */
                         "
                       />
                     </div>

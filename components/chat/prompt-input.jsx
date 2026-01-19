@@ -185,7 +185,9 @@ const PromptInput = forwardRef(function PromptInputFn(
   /* ----------  send message  ---------- */ // ..............................................................
   const onSend = async (overrideText, edit_message_id) => {
     const prompt = (typeof overrideText === 'string' ? overrideText : value).trim();
-    const finalPrompt = ocrText ? `${prompt}\n\n[OCR text from image below]:\n\n ${ocrText}]` : prompt;
+    // const finalPrompt = ocrText ? `${prompt}\n\n[OCR text from image below]:\n\n ${ocrText}]` : prompt;
+    const finalPrompt = prompt;
+    const ocrPayload = ocrText || null;
     let uploadedImageUrl = null;
     setShowPlaceholder(true)
     setSttLoading(false)
@@ -226,6 +228,7 @@ const PromptInput = forwardRef(function PromptInputFn(
         threadId,
         query: finalPrompt,
         image_url: uploadedImageUrl,
+        ocr_text: ocrPayload,
         edit_message_id: edit_message_id,
 
         onToken: (token) => {
